@@ -9,7 +9,7 @@ use simple_signal::{self, Signal};
 use rppal::gpio::{Gpio, OutputPin};
 
 // Gpio uses BCM pin numbering. BCM GPIO 23 is tied to physical pin 16.
-const RIGHT_PINS: [u8; 4] = [2, 17, 3, 4];
+const RIGHT_PINS: [u8; 4] = [4, 22, 17, 27];
 const LEFT_PINS: [u8; 4] = [12, 21, 16, 20];
 
 struct Motor {
@@ -84,6 +84,7 @@ impl Motor {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    println!("Eveline start");
     // Retrieve the GPIO pins and configure them as outputs.
     let mut right_motor = Motor::new(Side::Right);
     let mut left_motor = Motor::new(Side::Left);
@@ -115,6 +116,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             if left_motor.position == target_position {
                 target_position += 100;
                 target_position %= 200;
+                println!("new target {}", target_position);
             }
             if left_motor.position > target_position {
                 left_motor.step_down();
@@ -128,6 +130,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
+
+    println!("Eveline done");
 
     Ok(())
 
