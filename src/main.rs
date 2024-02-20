@@ -64,6 +64,11 @@ impl Motor {
         self.position += 1;
     }
     fn step_clock_wise(&mut self) {
+        // current in [0,1,2,3,4,5,6,7]
+        // pin 0      [1,1,0,0,0,0,0,1]
+        // pin 1      [0,1,1,1,0,0,0,0]
+        // pin 2      [0,0,0,1,1,1,0,0]
+        // pin 3      [0,0,0,0,0,1,1,1]
         let next = (self.current + 1) % self.pins.len();
         self.pins[next].set_high();
         self.pins[self.current].set_low();
