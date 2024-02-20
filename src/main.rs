@@ -89,7 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut left_motor = Motor::new(Side::Left);
 
     let delay = {
-        let rpm = 100;
+        let rpm = 10;
         let steps = 100;
         let steps_per_minute = steps * rpm;
         let millis_per_minute = 60 * 1000;
