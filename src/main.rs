@@ -63,28 +63,78 @@ impl Motor {
         };
         self.position += 1;
     }
-    fn step_clock_wise(&mut self) {
+    fn update_pins(&mut self) {
         // current in [0,1,2,3,4,5,6,7]
         // pin 0      [1,1,0,0,0,0,0,1]
         // pin 1      [0,1,1,1,0,0,0,0]
         // pin 2      [0,0,0,1,1,1,0,0]
         // pin 3      [0,0,0,0,0,1,1,1]
-        let next = (self.current + 1) % self.pins.len();
-        self.pins[next].set_high();
-        self.pins[self.current].set_low();
-        self.current = next;
+        match self.current {
+            0 => {
+                self.pins[0].set_high();
+                self.pins[1].set_low();
+                self.pins[2].set_low();
+                self.pins[3].set_low();
+            }
+            1 => {
+                self.pins[0].set_high();
+                self.pins[1].set_high();
+                self.pins[2].set_low();
+                self.pins[3].set_low();
+            }
+            2 => {
+                self.pins[0].set_low();
+                self.pins[1].set_high();
+                self.pins[2].set_low();
+                self.pins[3].set_low();
+            }
+            3 => {
+                self.pins[0].set_low();
+                self.pins[1].set_high();
+                self.pins[2].set_high();
+                self.pins[3].set_low();
+            }
+            4 => {
+                self.pins[0].set_low();
+                self.pins[1].set_low();
+                self.pins[2].set_high();
+                self.pins[3].set_low();
+            }
+            5 => {
+                self.pins[0].set_low();
+                self.pins[1].set_low();
+                self.pins[2].set_high();
+                self.pins[3].set_high();
+            }
+            6 => {
+                self.pins[0].set_low();
+                self.pins[1].set_low();
+                self.pins[2].set_low();
+                self.pins[3].set_high();
+            }
+            7 => {
+                self.pins[0].set_high();
+                self.pins[1].set_low();
+                self.pins[2].set_low();
+                self.pins[3].set_high();
+            }
+            _ => panic!(),
+        }
+    }
+    fn step_clock_wise(&mut self) {
+        self.current += 1;
+        self.current %= self.pins.len() * 2;
+        self.update_pins();
     }
     fn step_counter_clock_wise(&mut self) {
-        let next = {
+        self.current = {
             if self.current == 0 {
-                self.pins.len() - 1
+                (self.pins.len() * 2) - 1
             } else {
                 self.current - 1
             }
         };
-        self.pins[next].set_high();
-        self.pins[self.current].set_low();
-        self.current = next;
+        self.update_pins();
     }
 }
 
@@ -114,13 +164,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Blink the LED until running is set to false.
     let mut last_time = Instant::now();
-    let mut target_position = 100;
+    let mut target_position = 200;
     while running.load(Ordering::SeqCst) {
         if last_time.elapsed().as_millis() >= delay {
             last_time = Instant::now();
             if left_motor.position == target_position {
-                target_position += 100;
-                target_position %= 200;
+                target_position += 200;
+                target_position %= 400;
                 println!("new target {}", target_position);
             }
             if left_motor.position > target_position {
