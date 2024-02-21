@@ -64,14 +64,17 @@ impl Motor {
         self.position += 1;
     }
     fn update_pins(&mut self) {
-        // current in [0,1,2,3,4,5,6,7]
-        // pin 0      [1,1,0,0,0,0,0,1]
+        // current in [00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15]
+        // pin 0      [
         // pin 1      [0,1,1,1,0,0,0,0]
-        // pin 2      [0,0,0,1,1,1,0,0]
-        // pin 3      [0,0,0,0,0,1,1,1]
-        // c/2        [0,0,1,1,2,2,3,3]
+        // pin 2      [0,0,0,0,0,0,0,0]
+        // pin 3      [0,0,0,0,0,0,0,0]
+        // c/4        [ 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]
         // c%2        [0,1,0,1,0,1,0,1]
-        // ((c+1)/2)%4[0,1,1,2,2,3,3,0]
+        // (c+1)%4/2  [0,0,0,0,0,0,0,0]
+        let step_division = 2;
+        let main_pin = self.current / step_division;
+        let secondary_pin = (self.current + 1) % 4 / 2;
         match self.current {
             0 => {
                 self.pins[0].set_high();
