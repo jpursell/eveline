@@ -12,8 +12,8 @@ use rppal::gpio::{Gpio, OutputPin};
 // Gpio uses BCM pin numbering. BCM GPIO 23 is tied to physical pin 16.
 const RIGHT_PINS: [u8; 4] = [4, 22, 17, 27];
 const LEFT_PINS: [u8; 4] = [12, 21, 16, 20];
-const PWM_FREQ: f64 = 100.0;
-const STEP_DIVISION: usize = 4;
+const PWM_FREQ: f64 = 200.0;
+const STEP_DIVISION: usize = 2;
 
 struct Motor {
     pins: [OutputPin; 4],
@@ -57,7 +57,11 @@ impl Motor {
         let current_on = 0;
         pins[current_on].set_high();
         let current_pwm = 1;
-        pins[current_pwm].set_pwm_frequency(PWM_FREQ, 0.0).unwrap();
+        if STEP_DIVISION == 2 {
+            pins[current_pwm].set_low();
+        } else {
+            pins[current_pwm].set_pwm_frequency(PWM_FREQ, 0.0).unwrap();
+        }
         Motor {
             pins,
             current,
@@ -126,9 +130,19 @@ impl Motor {
             self.pins[self.current_on].set_low();
             self.current_on = on_pin;
         }
-        self.pins[pwm_pin]
-            .set_pwm_frequency(PWM_FREQ, duty_cycle)
-            .unwrap();
+        if STEP_DIVISION == 2 {
+            if duty_cycle == 1.0 {
+                self.pins[pwm_pin].set_high();
+            } else if duty_cycle == 0.0 {
+                self.pins[pwm_pin].set_low();
+            } else {
+                panic!()
+            }
+        } else {
+            self.pins[pwm_pin]
+                .set_pwm_frequency(PWM_FREQ, duty_cycle)
+                .unwrap();
+        }
     }
     fn step_clock_wise(&mut self) {
         self.current += 1;
@@ -171,7 +185,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    // Blink the LED until running is set to false.
+    // Operate until running is set to false.
     let mut last_time = Instant::now();
     let mut target_position = 100 * STEP_DIVISION as i32;
     while running.load(Ordering::SeqCst) {
