@@ -52,3 +52,47 @@ this seems ok as long as we are not having to jog across the board to start a
 new line a lot. Optimization can help with that. I was wondering if using a
 hilbert curve to sort the line starting positions would work well, or perhaps
 using a greedy min distance from ending position to starting position.
+
+## Planetary Gear Notes
+
+R = 2P + S
+P = (R - S) / 2
+
+where 
+R is the number of teeth in the ring
+P is the number of teeth in the planets
+S is the number of teeth in the sun
+
+(R + S)Ty = RTr + TsS
+
+where
+Tr is the turns of the ring gear
+Ts is the turns of the sun gear
+Ty is the turns of the planetary carrier
+
+Assuming ring is stationary we get
+(R + S)Ty = TsS
+Ty = TsS/(R + S)
+Ty/Ts=S/(R+S)
+
+let OR = Ty/Ts and solve for R
+(R+S)OR = S
+ROR + SOR = S
+ROR = S - SOR
+R = (S - SOR) / OR
+
+If we assumed we had 8 teeth on the sun and wanted a 1 to 12 ratio
+R = (8 - 8/12) * 12 = 88
+P = (R - S) / 2
+  = (88 - 8) / 2 = 40
+
+so if we had a 13 mm sun gear we would have 80 mm planet gears and 
+a 140 mm ring gear which is pretty big.
+
+You could also do 2 stages and make it taller
+
+if you had (assume 5 mm per tooth)
+R = 20 (32 mm)
+S = 8 (13 mm)
+P = 6 (10 mm)
+OR = 1:12.25 for 2 stages
