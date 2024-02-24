@@ -96,3 +96,26 @@ R = 20 (32 mm)
 S = 8 (13 mm)
 P = 6 (10 mm)
 OR = 1:12.25 for 2 stages
+
+### Gear Parameters
+
+From the internet
+double helix gears are good
+25 degree pressure angle is recomended
+Looks like 0.3 mm module is too small
+
+Module = OD / (2 + T)
+so if I wanted to have 20 teeth and 32 mm OD
+Module = 32 / (2 + 20) = 1.45 ish. 
+It looks like 1.5 is a standard module so we can use that
+other params:
+gear height: 10 mm
+helix angle: 15 deg
+
+### Simple 1:12 2 Gear Plan
+small gear: 9 teeth
+large gear: 108 teeth (this is too big)
+
+### Double reduction 1:11.8
+small gear: 9 teeth
+large gear: 31 teeth
