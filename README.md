@@ -119,3 +119,33 @@ large gear: 108 teeth (this is too big)
 ### Double reduction 1:11.8
 small gear: 9 teeth
 large gear: 31 teeth
+
+### Module
+
+1.5 seems too large
+will try 0.7
+Maybe the cog for the 
+tooth height is 2.25 *m 
+lets have OD be 14
+m = od / (2 +t)
+t = od/ m - 2 = 18
+t = 62 for large gear
+Module of 0.7 seems ok, but I wodnder if smaller could be better
+
+### Smaller
+
+Try 0.3 module, 2mm height, straight, 14.5 pressure angle
+smaller OD
+13mm OD
+t = 13/0.3 -2 = 41
+t = 142
+27.5 moved over
+
+### 0.3 is too small
+
+Try 0.7 module, 2mm height, straight, 25 pressure angle
+smaller OD
+13mm OD
+t = 13/0.7 -2 = 17
+t = 59
+26.6 moved over
