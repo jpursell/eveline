@@ -97,10 +97,10 @@ impl Motor {
         let main_pin = self.current / STEP_DIVISION;
         let secondary_pin = (main_pin + 1) % self.pins.len();
         let phase = self.current % STEP_DIVISION;
-        println!(
-            "{} current {} main {} sec {} phase {}",
-            self.side, self.current, main_pin, secondary_pin, phase
-        );
+        // println!(
+        //     "{} current {} main {} sec {} phase {}",
+        //     self.side, self.current, main_pin, secondary_pin, phase
+        // );
         let (on_pin, pwm_pin, duty_cycle) = if phase < STEP_DIVISION / 2 {
             let on_pin = main_pin;
             let pwm_pin = secondary_pin;
@@ -114,18 +114,18 @@ impl Motor {
                 .sin();
             (on_pin, pwm_pin, duty_cycle)
         };
-        println!(
-            "{} on_pin {} pwm_pin {} duty {}",
-            self.side, on_pin, pwm_pin, duty_cycle
-        );
+        // println!(
+        //     "{} on_pin {} pwm_pin {} duty {}",
+        //     self.side, on_pin, pwm_pin, duty_cycle
+        // );
         if self.current_pwm != pwm_pin {
-            println!("{} clear pwm on {}", self.side, self.current_pwm);
+            // println!("{} clear pwm on {}", self.side, self.current_pwm);
             self.pins[self.current_pwm].clear_pwm().unwrap();
             self.pins[self.current_pwm].set_low();
             self.current_pwm = pwm_pin;
         }
         if self.current_on != on_pin {
-            println!("{} turn off {}", self.side, self.current_on);
+            // println!("{} turn off {}", self.side, self.current_on);
             self.pins[on_pin].set_high();
             self.pins[self.current_on].set_low();
             self.current_on = on_pin;
@@ -164,11 +164,11 @@ impl Motor {
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Eveline start");
     // Retrieve the GPIO pins and configure them as outputs.
-    let mut right_motor = Motor::new(Side::Right);
+    // let mut right_motor = Motor::new(Side::Right);
     let mut left_motor = Motor::new(Side::Left);
 
     let delay = {
-        let rpm = 0.1;
+        let rpm = 100.0;
         let steps = 100.0 * STEP_DIVISION as f64;
         let steps_per_minute = steps * rpm;
         let seconds_per_minute = 60.0;
@@ -201,11 +201,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             } else {
                 left_motor.step_up();
             }
-            if right_motor.position > target_position {
-                right_motor.step_down();
-            } else {
-                right_motor.step_up();
-            }
+            // if right_motor.position > target_position {
+            //     right_motor.step_down();
+            // } else {
+            //     right_motor.step_up();
+            // }
         }
     }
 
