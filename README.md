@@ -38,3 +38,8 @@ Module = OD / (2 + T)
 
 I'm using orcaslicer and polyholes. I use compliant grippers for holding the bearings and
 attaching the pinion to the motor shaft.
+
+### Building
+
+rpi_tools comes from
+https://github.com/raspberrypi/tools
