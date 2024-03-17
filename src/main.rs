@@ -215,6 +215,7 @@ struct Controller {
     acceleration: (f32, f32),
     max_velocity: f32,
     max_acceleration: f32,
+    max_jerk: f32,
 }
 
 impl Controller {
@@ -234,9 +235,14 @@ impl Controller {
         let velocity = (0.0, 0.0);
         let acceleration = (0.0, 0.0);
         let max_rpm = 100.0;
+        // max_revs_per_second is about 1.7
         let max_revs_per_second = max_rpm / 60.0;
+        // max_steps_per_second is about 170
         let max_steps_per_second = max_revs_per_second * motor_steps_per_revolution;
+        // max velocity is about 5 mm/s
         let max_velocity = max_steps_per_second / steps_per_mm;
+        let max_acceleration = 1.0;
+        let max_jerk = 1.0;
         Controller {
             current_position,
             left_motor,
@@ -247,6 +253,9 @@ impl Controller {
             steps_per_mm,
             velocity,
             acceleration,
+            max_velocity,
+            max_acceleration,
+            max_jerk,
         }
     }
     fn physical_mm_to_phsical_polar(&self, x: f32, y: f32) -> (f32, f32) {
