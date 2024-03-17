@@ -164,7 +164,7 @@ impl Motor {
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Eveline start");
     // Retrieve the GPIO pins and configure them as outputs.
-    // let mut right_motor = Motor::new(Side::Right);
+    let mut right_motor = Motor::new(Side::Right);
     let mut left_motor = Motor::new(Side::Left);
 
     let delay = {
@@ -201,11 +201,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             } else {
                 left_motor.step_up();
             }
-            // if right_motor.position > target_position {
-            //     right_motor.step_down();
-            // } else {
-            //     right_motor.step_up();
-            // }
+            if right_motor.position > target_position {
+                right_motor.step_down();
+            } else {
+                right_motor.step_up();
+            }
         }
     }
 
