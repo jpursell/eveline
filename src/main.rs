@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt::Display;
+use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -191,19 +192,100 @@ impl Motor {
     }
 }
 
+enum HomeStatus {
+    Uninitialized,
+    Query,
+    Moving,
+    Complete,
+}
+
+struct Controller {
+    current_position: (usize, usize),
+    left_motor: Motor,
+    right_motor: Motor,
+    home_status: HomeStatus,
+}
+
+impl Controller {
+    fn new() -> Controller {
+        let mut right_motor = Motor::new(Side::Right);
+        let mut left_motor = Motor::new(Side::Left);
+        let current_position = (0, 0);
+        let home_status = HomeStatus::Uninitialized;
+        Controller {
+            current_position,
+            left_motor,
+            right_motor,
+            home_status,
+        }
+    }
+    fn physical_mm_to_step_position(&self, x: f32, y: f32) -> (usize, usize) {
+        todo!();
+    }
+    fn set_current_position_from_user(&mut self) -> Result<(), ()> {
+        println!("what's the current position in mm? provide \"x,y\"");
+        let mut input = String::new();
+        if let Err(error) = io::stdin().read_line(&mut input) {
+            println!("error: {error}");
+            return Err(());
+        }
+        let (x, y) = {
+            let input = input.trim();
+            let Some((x, y)) = input.split_once(",") else {
+                println!("Did not get expected format");
+                return Err(());
+            };
+            println!("got {}, {}", x, y);
+            let Ok(x) = x.parse::<f32>() else {
+                println!("Failed to parse \"{}\"", x);
+                return Err(());
+            };
+            let Ok(y) = y.parse::<f32>() else {
+                println!("Failed to parse \"{}\"", y);
+                return Err(());
+            };
+            (x, y)
+        };
+        let (x, y) = self.physical_mm_to_step_position(x, y);
+        self.current_position = (x, y);
+        Ok(())
+    }
+    /// Move current position in steps to (x, y)
+    fn move_to(x: usize, y: usize) {
+        todo!();
+    }
+    fn update(&mut self) {
+        match self.home_status {
+            HomeStatus::Complete => {
+                todo!()
+            }
+            HomeStatus::Uninitialized => {
+                if let Ok(_) = self.set_current_position_from_user() {
+                    self.home_status = HomeStatus::Moving;
+                }
+            }
+            HomeStatus::Query => todo!(),
+            HomeStatus::Moving => {
+                self.move_to(0, 0);
+            }
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Eveline start");
     // Retrieve the GPIO pins and configure them as outputs.
-    let mut right_motor = Motor::new(Side::Right);
-    let mut left_motor = Motor::new(Side::Left);
+    let mut controller = Controller::new();
+    // let mut right_motor = Motor::new(Side::Right);
+    // let mut left_motor = Motor::new(Side::Left);
 
-    let delay = {
-        let rpm = 100.0;
-        let steps = 100.0 * STEP_DIVISION as f64;
-        let steps_per_minute = steps * rpm;
-        let seconds_per_minute = 60.0;
-        seconds_per_minute / steps_per_minute
-    };
+    // let delay = {
+    //     let rpm = 100.0;
+    //     let steps = 100.0 * STEP_DIVISION as f64;
+    //     let steps_per_minute = steps * rpm;
+    //     let seconds_per_minute = 60.0;
+    //     seconds_per_minute / steps_per_minute
+    // };
 
     let running = Arc::new(AtomicBool::new(true));
 
@@ -216,27 +298,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     // Operate until running is set to false.
-    let mut last_time = Instant::now();
-    let mut target_position = 100 * STEP_DIVISION as i32;
+    // let mut last_time = Instant::now();
+    // let mut target_position = 100 * STEP_DIVISION as i32;
     while running.load(Ordering::SeqCst) {
-        if last_time.elapsed().as_secs_f64() as f64 >= delay {
-            last_time = Instant::now();
-            if left_motor.position == target_position {
-                target_position += 100 * STEP_DIVISION as i32;
-                target_position %= 200 * STEP_DIVISION as i32;
-                println!("new target {}", target_position);
-            }
-            if left_motor.position > target_position {
-                left_motor.step_down();
-            } else {
-                left_motor.step_up();
-            }
-            if right_motor.position > target_position {
-                right_motor.step_down();
-            } else {
-                right_motor.step_up();
-            }
-        }
+        // if last_time.elapsed().as_secs_f64() as f64 >= delay {
+        //     last_time = Instant::now();
+        //     if left_motor.position == target_position {
+        //         target_position += 100 * STEP_DIVISION as i32;
+        //         target_position %= 200 * STEP_DIVISION as i32;
+        //         println!("new target {}", target_position);
+        //     }
+        //     if left_motor.position > target_position {
+        //         left_motor.step_down();
+        //     } else {
+        //         left_motor.step_up();
+        //     }
+        //     if right_motor.position > target_position {
+        //         right_motor.step_down();
+        //     } else {
+        //         right_motor.step_up();
+        //     }
+        // }
+        controller.update();
     }
 
     println!("Eveline done");
