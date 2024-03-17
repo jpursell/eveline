@@ -204,6 +204,9 @@ struct Controller {
     left_motor: Motor,
     right_motor: Motor,
     home_status: HomeStatus,
+    left_motor_pos_mm: (f32, f32),
+    right_motor_pos_mm: (f32, f32),
+    steps_per_mm: f32,
 }
 
 impl Controller {
@@ -212,15 +215,35 @@ impl Controller {
         let mut left_motor = Motor::new(Side::Left);
         let current_position = (0, 0);
         let home_status = HomeStatus::Uninitialized;
+        let spool_radius = 5.75;
+        let gear_ratio = (59.0 / 17.0).powi(2);
+        let motor_steps_per_revolution = 100 * STEP_DIVISION;
+        let left_motor_pos_mm = (0.0, 368.8);
+        let right_motor_pos_mm = (297.0, 368.8);
+        let spool_circumfrence = spool_radius * 2 * std::f32::consts::PI;
+        let steps_per_mm = motor_steps_per_revolution * gear_ratio / spool_circumfrence;
         Controller {
             current_position,
             left_motor,
             right_motor,
             home_status,
+            left_motor_pos_mm,
+            right_motor_pos_mm,
+            steps_per_mm,
         }
     }
+    fn physical_mm_to_phsical_polar(&self, x: f32, y: f32) -> (f32, f32) {
+        left = ((x - self.left_motor_pos_mm.0).powi(2) + (y - self.left_motor_pos_mm.1).powi(2))
+            .sqrt();
+        right = ((x - self.right_motor_pos_mm.0).powi(2) + (y - self.right_motor_pos_mm.1).powi(2))
+            .sqrt();
+        (left, right)
+    }
     fn physical_mm_to_step_position(&self, x: f32, y: f32) -> (usize, usize) {
-        todo!();
+        let (left_radius_mm, right_radius_mm) = self.physical_mm_to_phsical_polar(x, y);
+        let left_steps = (left_radius_mm * self.steps_per_mm).round() as usize;
+        let right_steps = (right_radius_mm * self.steps_per_mm).round() as usize;
+        (left_steps, right_steps)
     }
     fn set_current_position_from_user(&mut self) -> Result<(), ()> {
         println!("what's the current position in mm? provide \"x,y\"");
@@ -251,7 +274,10 @@ impl Controller {
         Ok(())
     }
     /// Move current position in steps to (x, y)
-    fn move_to(x: usize, y: usize) {
+    fn move_to_mm(&self, x: f32, y: f32) {
+        let (x, y) = self.physical_mm_to_step_position(x, y);
+        let delta_x = x - self.current_position.0;
+        let delta_y = y - self.current_position.1;
         todo!();
     }
     fn update(&mut self) {
