@@ -13,7 +13,7 @@ use rppal::gpio::{Gpio, OutputPin};
 const RIGHT_PINS: [u8; 4] = [4, 22, 17, 27];
 const LEFT_PINS: [u8; 4] = [12, 21, 16, 20];
 const PWM_FREQ: f64 = 200.0;
-const STEP_DIVISION: usize = 2;
+const STEP_DIVISION: usize = 1;
 
 struct Motor {
     pins: [OutputPin; 4],
@@ -57,10 +57,16 @@ impl Motor {
         let current_on = 0;
         pins[current_on].set_high();
         let current_pwm = 1;
-        if STEP_DIVISION == 2 {
-            pins[current_pwm].set_low();
-        } else {
-            pins[current_pwm].set_pwm_frequency(PWM_FREQ, 0.0).unwrap();
+        match STEP_DIVISION {
+            1 => {
+                pins[current_pwm].set_high();
+            }
+            2 => {
+                pins[current_pwm].set_low();
+            }
+            _ => {
+                pins[current_pwm].set_pwm_frequency(PWM_FREQ, 0.0).unwrap();
+            }
         }
         Motor {
             pins,
@@ -85,7 +91,31 @@ impl Motor {
         };
         self.position += 1;
     }
+    /// Update pins for whole step mode
+    fn update_pins_whole_step(&mut self) {
+        let main_pin = self.current;
+        let secondary_pin = (main_pin + 1) % self.pins.len();
+        if main_pin == self.current_on {
+            // nothing happened
+            return;
+        } else if main_pin == self.current_pwm {
+            // current was increased
+            self.pins[self.current_on].set_low();
+            self.pins[secondary_pin].set_high();
+        } else if secondary_pin == self.current_on {
+            // current was decreased
+            self.pins[self.current_pwm].set_low();
+            self.pins[main_pin].set_high();
+        } else {
+            panic!();
+        }
+        self.current_on = main_pin;
+        self.current_pwm = secondary_pin;
+    }
     fn update_pins(&mut self) {
+        if STEP_DIVISION == 1 {
+            return self.update_pins_whole_step();
+        }
         // current in [00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15]
         // pin 0      [ 1, 1, 1,.7, 0, 0, 0, 0, 0, 0, 0, 0, 0,.7, 1, 1]
         // pin 1      [ 0,.7, 1, 1, 1, 1, 1,.7, 0, 0, 0, 0, 0, 0, 0, 0]
