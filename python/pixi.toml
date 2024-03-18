@@ -1,0 +1,18 @@
+[project]
+name = "python"
+version = "0.1.0"
+description = "Add a short description here"
+authors = ["Jeff Pursell <jpursell@gmail.com>"]
+channels = ["conda-forge"]
+platforms = ["osx-64"]
+
+[tasks]
+
+[dependencies]
+numpy = ">=1.26.4,<1.27"
+jupyterlab = ">=4.1.5,<4.2"
+holoviews = ">=1.18.3,<1.19"
+bokeh = ">=3.3.4,<3.4"
+panel = ">=1.3.8,<1.4"
+icecream = ">=2.1.3,<2.2"
+pandas = ">=2.2.1,<2.3"
