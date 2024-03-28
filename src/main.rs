@@ -198,21 +198,22 @@ enum HomeStatus {
     Complete,
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum MoveStatus {
     Moving,
     Arrived,
 }
 
 struct Controller {
-    current_position: (usize, usize),
+    current_position: [usize; 2],
     left_motor: Motor,
     right_motor: Motor,
     home_status: HomeStatus,
-    left_motor_pos_mm: (f32, f32),
-    right_motor_pos_mm: (f32, f32),
+    left_motor_pos_mm: [f32; 2],
+    right_motor_pos_mm: [f32; 2],
     steps_per_mm: f32,
-    velocity: (f32, f32),
-    acceleration: (f32, f32),
+    velocity: [f32; 2],
+    acceleration: [f32; 2],
     max_velocity: f32,
     max_acceleration: f32,
     max_jerk: f32,
@@ -222,23 +223,23 @@ impl Controller {
     fn new() -> Controller {
         let mut right_motor = Motor::new(Side::Right);
         let mut left_motor = Motor::new(Side::Left);
-        let current_position = (0, 0);
+        let current_position = [0, 0];
         let home_status = HomeStatus::Query;
-        let spool_radius = 5.75;
-        let gear_ratio = (59.0 / 17.0).powi(2);
+        let spool_radius: f32 = 5.75;
+        let gear_ratio: f32 = (59.0_f32 / 17.0_f32).powi(2);
         let motor_steps_per_revolution = 100 * STEP_DIVISION;
-        let left_motor_pos_mm = (0.0, 368.8);
-        let right_motor_pos_mm = (297.0, 368.8);
-        let spool_circumfrence = spool_radius * 2 * std::f32::consts::PI;
+        let left_motor_pos_mm = [0.0, 368.8];
+        let right_motor_pos_mm = [297.0, 368.8];
+        let spool_circumfrence = spool_radius * 2.0 * std::f32::consts::PI;
         // steps_per_mm is aprox 33.2
-        let steps_per_mm = motor_steps_per_revolution * gear_ratio / spool_circumfrence;
-        let velocity = (0.0, 0.0);
-        let acceleration = (0.0, 0.0);
-        let max_rpm = 100.0;
+        let steps_per_mm = motor_steps_per_revolution as f32 * gear_ratio / spool_circumfrence;
+        let velocity = [0.0, 0.0];
+        let acceleration = [0.0, 0.0];
+        let max_rpm = 100.0_f32;
         // max_revs_per_second is about 1.7
         let max_revs_per_second = max_rpm / 60.0;
         // max_steps_per_second is about 170
-        let max_steps_per_second = max_revs_per_second * motor_steps_per_revolution;
+        let max_steps_per_second = max_revs_per_second * motor_steps_per_revolution as f32;
         // max velocity is about 5 mm/s
         let max_velocity = max_steps_per_second / steps_per_mm;
         let max_acceleration = 1.0;
@@ -258,18 +259,18 @@ impl Controller {
             max_jerk,
         }
     }
-    fn physical_mm_to_phsical_polar(&self, x: f32, y: f32) -> (f32, f32) {
-        left = ((x - self.left_motor_pos_mm.0).powi(2) + (y - self.left_motor_pos_mm.1).powi(2))
+    fn physical_mm_to_phsical_polar(&self, x: f32, y: f32) -> [f32; 2] {
+        let left = ((x - self.left_motor_pos_mm[0]).powi(2) + (y - self.left_motor_pos_mm[1]).powi(2))
             .sqrt();
-        right = ((x - self.right_motor_pos_mm.0).powi(2) + (y - self.right_motor_pos_mm.1).powi(2))
+        let right = ((x - self.right_motor_pos_mm[0]).powi(2) + (y - self.right_motor_pos_mm[1]).powi(2))
             .sqrt();
-        (left, right)
+        [left, right]
     }
-    fn physical_mm_to_step_position(&self, x: f32, y: f32) -> (usize, usize) {
-        let (left_radius_mm, right_radius_mm) = self.physical_mm_to_phsical_polar(x, y);
+    fn physical_mm_to_step_position(&self, x: f32, y: f32) -> [usize; 2] {
+        let [left_radius_mm, right_radius_mm] = self.physical_mm_to_phsical_polar(x, y);
         let left_steps = (left_radius_mm * self.steps_per_mm).round() as usize;
         let right_steps = (right_radius_mm * self.steps_per_mm).round() as usize;
-        (left_steps, right_steps)
+        [left_steps, right_steps]
     }
     fn set_current_position_from_user(&mut self) -> Result<(), ()> {
         println!("what's the current position in mm? provide \"x,y\"");
@@ -295,15 +296,15 @@ impl Controller {
             };
             (x, y)
         };
-        let (x, y) = self.physical_mm_to_step_position(x, y);
-        self.current_position = (x, y);
+        let [x, y] = self.physical_mm_to_step_position(x, y);
+        self.current_position = [x, y];
         Ok(())
     }
     /// Move current position in steps to (x, y)
     fn move_to_mm(&self, x: f32, y: f32) -> MoveStatus {
-        let (x, y) = self.physical_mm_to_step_position(x, y);
-        let delta_x = x - self.current_position.0;
-        let delta_y = y - self.current_position.1;
+        let [x, y] = self.physical_mm_to_step_position(x, y);
+        let delta_x = x - self.current_position[0];
+        let delta_y = y - self.current_position[1];
         todo!();
     }
     fn update(&mut self) {
@@ -313,7 +314,7 @@ impl Controller {
             }
             HomeStatus::Query => {
                 if let Ok(_) = self.set_current_position_from_user() {
-                    if self.current_position == (0.0, 0.0) {
+                    if self.current_position == [0, 0] {
                         self.home_status = HomeStatus::Complete;
                     } else {
                         self.home_status = HomeStatus::Moving;
@@ -321,7 +322,7 @@ impl Controller {
                 }
             }
             HomeStatus::Moving => {
-                if self.move_to_mm(0, 0) == MoveStatus::Arrived {
+                if self.move_to_mm(0.0, 0.0) == MoveStatus::Arrived {
                     self.home_status = HomeStatus::Query;
                 }
             }
