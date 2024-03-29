@@ -209,8 +209,7 @@ struct Controller {
     left_motor: Motor,
     right_motor: Motor,
     home_status: HomeStatus,
-    left_motor_pos_mm: [f32; 2],
-    right_motor_pos_mm: [f32; 2],
+    motor_pos_mm: [[f32; 2]; 2],
     steps_per_mm: f32,
     velocity: [f32; 2],
     acceleration: [f32; 2],
@@ -228,8 +227,8 @@ impl Controller {
         let spool_radius: f32 = 5.75;
         let gear_ratio: f32 = (59.0_f32 / 17.0_f32).powi(2);
         let motor_steps_per_revolution = 100 * STEP_DIVISION;
-        let left_motor_pos_mm = [0.0, 368.8];
-        let right_motor_pos_mm = [297.0, 368.8];
+        // left, right
+        let motor_pos_mm = [[0.0, 368.8], [297.0, 368.8]];
         let spool_circumfrence = spool_radius * 2.0 * std::f32::consts::PI;
         // steps_per_mm is aprox 33.2
         let steps_per_mm = motor_steps_per_revolution as f32 * gear_ratio / spool_circumfrence;
@@ -249,8 +248,7 @@ impl Controller {
             left_motor,
             right_motor,
             home_status,
-            left_motor_pos_mm,
-            right_motor_pos_mm,
+            motor_pos_mm,
             steps_per_mm,
             velocity,
             acceleration,
@@ -259,50 +257,48 @@ impl Controller {
             max_jerk,
         }
     }
-    fn physical_mm_to_phsical_polar(&self, x: f32, y: f32) -> [f32; 2] {
-        let left = ((x - self.left_motor_pos_mm[0]).powi(2) + (y - self.left_motor_pos_mm[1]).powi(2))
-            .sqrt();
-        let right = ((x - self.right_motor_pos_mm[0]).powi(2) + (y - self.right_motor_pos_mm[1]).powi(2))
-            .sqrt();
-        [left, right]
+    fn physical_mm_to_phsical_polar(&self, xy: [f32; 2]) -> [f32; 2] {
+        self.motor_pos_mm
+            .map(|mp| ((xy[0] - mp[0]).powi(2) + (xy[1] - mp[1]).powi(2)).sqrt())
     }
-    fn physical_mm_to_step_position(&self, x: f32, y: f32) -> [usize; 2] {
-        let [left_radius_mm, right_radius_mm] = self.physical_mm_to_phsical_polar(x, y);
-        let left_steps = (left_radius_mm * self.steps_per_mm).round() as usize;
-        let right_steps = (right_radius_mm * self.steps_per_mm).round() as usize;
-        [left_steps, right_steps]
+    fn physical_mm_to_step_position(&self, xy: [f32; 2]) -> [usize; 2] {
+        self.physical_mm_to_phsical_polar(xy)
+            .map(|lr| (lr * self.steps_per_mm).round() as usize)
     }
-    fn set_current_position_from_user(&mut self) -> Result<(), ()> {
-        println!("what's the current position in mm? provide \"x,y\"");
+    fn get_position_from_user() -> Result<[f32;2], ()> {
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             println!("error: {error}");
             return Err(());
         }
-        let (x, y) = {
+        let xy = {
             let input = input.trim();
-            let Some((x, y)) = input.split_once(",") else {
+            let Some(xy_s) = input.split_once(",") else {
                 println!("Did not get expected format");
                 return Err(());
             };
-            println!("got {}, {}", x, y);
-            let Ok(x) = x.parse::<f32>() else {
-                println!("Failed to parse \"{}\"", x);
-                return Err(());
-            };
-            let Ok(y) = y.parse::<f32>() else {
-                println!("Failed to parse \"{}\"", y);
-                return Err(());
-            };
-            (x, y)
+            let xy_s = [xy_s.0, xy_s.1];
+            println!("got {}, {}", xy_s[0], xy_s[1]);
+            let mut xy_f : [f32; 2] = [0.0, 0.0];
+            for (s, f) in xy_s.iter().zip(xy_f.iter_mut()) {
+                let Ok(f) = s.parse::<f32>() else {
+                    println!("Failed to parse \"{}\"", s);
+                    return Err(());
+                };
+            }
+            xy_f
         };
-        let [x, y] = self.physical_mm_to_step_position(x, y);
-        self.current_position = [x, y];
+        Ok(xy)
+    }
+    fn set_current_position_from_user(&mut self) -> Result<(), ()> {
+        println!("what's the current position in mm? provide \"x,y\"");
+        let xy = Controller::get_position_from_user();
+        self.current_position = self.physical_mm_to_step_position(xy);
         Ok(())
     }
     /// Move current position in steps to (x, y)
     fn move_to_mm(&self, x: f32, y: f32) -> MoveStatus {
-        let [x, y] = self.physical_mm_to_step_position(x, y);
+        let [x, y] = self.physical_mm_to_step_position([x, y]);
         let delta_x = x - self.current_position[0];
         let delta_y = y - self.current_position[1];
         todo!();
@@ -313,6 +309,7 @@ impl Controller {
                 todo!()
             }
             HomeStatus::Query => {
+                todo!("Also get paper bottom left");
                 if let Ok(_) = self.set_current_position_from_user() {
                     if self.current_position == [0, 0] {
                         self.home_status = HomeStatus::Complete;
