@@ -122,7 +122,7 @@ impl Controller {
                     if self.current_position == self.paper_origin {
                         self.home_status = HomeStatus::Complete;
                     } else {
-                        self.init_move(&self.paper_origin);
+                        self.init_move(&self.paper_origin.clone());
                         self.home_status = HomeStatus::Moving;
                     }
                 }
