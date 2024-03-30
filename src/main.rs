@@ -1,9 +1,10 @@
 use std::error::Error;
 use std::fmt::Display;
-use std::io;
+use std::ops::Index;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+use std::{default, io};
 
 // The simple-signal crate is used to handle incoming signals.
 use simple_signal::{self, Signal};
@@ -193,7 +194,8 @@ impl Motor {
 }
 
 enum HomeStatus {
-    Query,
+    QueryPaper,
+    QueryPosition,
     Moving,
     Complete,
 }
@@ -204,68 +206,130 @@ enum MoveStatus {
     Arrived,
 }
 
-struct Controller {
-    current_position: [usize; 2],
-    left_motor: Motor,
-    right_motor: Motor,
-    home_status: HomeStatus,
-    motor_pos_mm: [[f32; 2]; 2],
-    steps_per_mm: f32,
-    velocity: [f32; 2],
-    acceleration: [f32; 2],
+#[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
+struct PositionUM {
+    xy: [usize; 2],
+}
+
+impl PositionUM {
+    fn new(xy: [usize; 2]) -> Self {
+        PositionUM { xy }
+    }
+    fn from_mm(xy: [f32; 2]) -> Self {
+        Self::new(xy.map(|p| (p * 1000.0).round() as usize))
+    }
+}
+
+impl Index<usize> for PositionUM {
+    type Output = usize;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.xy[index]
+    }
+}
+
+#[derive(Default)]
+struct PositionStep {
+    rr: [usize; 2],
+}
+
+impl PositionStep {
+    fn new(rr: [usize; 2]) -> Self {
+        PositionStep {rr}
+    }
+}
+
+impl Index<usize> for PositionStep {
+    type Output = usize;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.rr[index]
+    }
+}
+
+#[derive(Default)]
+struct Position {
+    um: PositionUM,
+    step: PositionStep,
+}
+
+impl Position {
+    fn new(um: PositionUM, step: PositionStep) -> Self {
+        Position{um, step}
+    }
+    fn from_mm(xy:[f32;2], physical: &Physical) -> Self {
+        let um = PositionUM::from_mm(xy);
+        Self::from_um(um, physical)
+    }
+    fn from_um(um: PositionUM, physical: &Physical) -> Self {
+        let mut rr = physical.motor_pos.iter()
+            .map(|mp| {
+                let r2 = ((um[0] - mp[0]).pow(2) + (um[1] - mp[1]).pow(2)) as f64;
+                let r = r2.sqrt();
+                let step = r * physical.steps_per_mm;
+                step.round() as usize
+            }
+        );
+        let rr = [rr.next().unwrap(), rr.next().unwrap()];
+        Position::new(um, PositionStep::new(rr))
+    }
+}
+
+struct Physical {
+    motor_pos: [PositionUM; 2],
+    steps_per_mm: f64,
     max_velocity: f32,
     max_acceleration: f32,
     max_jerk: f32,
 }
 
-impl Controller {
-    fn new() -> Controller {
-        let mut right_motor = Motor::new(Side::Right);
-        let mut left_motor = Motor::new(Side::Left);
-        let current_position = [0, 0];
-        let home_status = HomeStatus::Query;
-        let spool_radius: f32 = 5.75;
-        let gear_ratio: f32 = (59.0_f32 / 17.0_f32).powi(2);
+impl Physical {
+    fn new() -> Physical {
+        let mm = PositionUM::from_mm;
+        let motor_pos = [mm([0.0, 368.8]), mm([297.0, 368.8])];
+        let spool_radius: f64 = 5.75;
+        let gear_ratio: f64 = (59.0_f64 / 17.0_f64).powi(2);
         let motor_steps_per_revolution = 100 * STEP_DIVISION;
         // left, right
-        let motor_pos_mm = [[0.0, 368.8], [297.0, 368.8]];
-        let spool_circumfrence = spool_radius * 2.0 * std::f32::consts::PI;
+        let spool_circumfrence = spool_radius * 2.0 * std::f64::consts::PI;
         // steps_per_mm is aprox 33.2
-        let steps_per_mm = motor_steps_per_revolution as f32 * gear_ratio / spool_circumfrence;
-        let velocity = [0.0, 0.0];
-        let acceleration = [0.0, 0.0];
+        let steps_per_mm = motor_steps_per_revolution as f64 * gear_ratio / spool_circumfrence;
         let max_rpm = 100.0_f32;
         // max_revs_per_second is about 1.7
         let max_revs_per_second = max_rpm / 60.0;
         // max_steps_per_second is about 170
         let max_steps_per_second = max_revs_per_second * motor_steps_per_revolution as f32;
         // max velocity is about 5 mm/s
-        let max_velocity = max_steps_per_second / steps_per_mm;
-        let max_acceleration = 1.0;
-        let max_jerk = 1.0;
-        Controller {
-            current_position,
-            left_motor,
-            right_motor,
-            home_status,
-            motor_pos_mm,
+        let max_velocity = max_steps_per_second / steps_per_mm as f32;
+        Physical {
+            motor_pos,
             steps_per_mm,
-            velocity,
-            acceleration,
             max_velocity,
-            max_acceleration,
-            max_jerk,
+            max_acceleration: 1.0,
+            max_jerk: 1.0,
         }
     }
-    fn physical_mm_to_phsical_polar(&self, xy: [f32; 2]) -> [f32; 2] {
-        self.motor_pos_mm
-            .map(|mp| ((xy[0] - mp[0]).powi(2) + (xy[1] - mp[1]).powi(2)).sqrt())
+}
+
+struct Controller {
+    current_position: Position,
+    motors: [Motor; 2],
+    home_status: HomeStatus,
+    paper_origin: PositionUM,
+    physical: Physical,
+}
+
+impl Controller {
+    fn new() -> Controller {
+        let motors = [Side::Left, Side::Right].map(|s| Motor::new(s));
+        let home_status = HomeStatus::QueryPaper;
+        Controller {
+            current_position: Position::default(),
+            motors,
+            home_status,
+            paper_origin: PositionUM::default(),
+            physical: Physical::new(),
+        }
     }
-    fn physical_mm_to_step_position(&self, xy: [f32; 2]) -> [usize; 2] {
-        self.physical_mm_to_phsical_polar(xy)
-            .map(|lr| (lr * self.steps_per_mm).round() as usize)
-    }
-    fn get_position_from_user() -> Result<[f32;2], ()> {
+    fn get_position_from_user() -> Result<PositionUM, ()> {
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             println!("error: {error}");
@@ -279,7 +343,7 @@ impl Controller {
             };
             let xy_s = [xy_s.0, xy_s.1];
             println!("got {}, {}", xy_s[0], xy_s[1]);
-            let mut xy_f : [f32; 2] = [0.0, 0.0];
+            let mut xy_f: [f32; 2] = [0.0, 0.0];
             for (s, f) in xy_s.iter().zip(xy_f.iter_mut()) {
                 let Ok(f) = s.parse::<f32>() else {
                     println!("Failed to parse \"{}\"", s);
@@ -288,19 +352,32 @@ impl Controller {
             }
             xy_f
         };
-        Ok(xy)
+        Ok(PositionUM::from_mm(xy))
     }
     fn set_current_position_from_user(&mut self) -> Result<(), ()> {
-        println!("what's the current position in mm? provide \"x,y\"");
-        let xy = Controller::get_position_from_user();
-        self.current_position = self.physical_mm_to_step_position(xy);
-        Ok(())
+        println!("What's the current position in mm? provide \"x,y\"");
+        for _ in 0..4 {
+            if let Ok(um) = Controller::get_position_from_user() {
+                self.current_position = Position::from_um(um, &self.physical);
+                return Ok(());
+            }
+        }
+        Err(())
+    }
+    fn set_paper_origin_from_user(&mut self) -> Result<(), ()> {
+        println!(
+            "What's the location of the lower left corner of the paper in mm? provide \"x,y\""
+        );
+        for _ in 0..4 {
+            if let Ok(um) = Controller::get_position_from_user() {
+                self.paper_origin = um;
+                return Ok(());
+            }
+        }
+        Err(())
     }
     /// Move current position in steps to (x, y)
-    fn move_to_mm(&self, x: f32, y: f32) -> MoveStatus {
-        let [x, y] = self.physical_mm_to_step_position([x, y]);
-        let delta_x = x - self.current_position[0];
-        let delta_y = y - self.current_position[1];
+    fn move_to(&self, um: &PositionUM) -> MoveStatus {
         todo!();
     }
     fn update(&mut self) {
@@ -308,10 +385,14 @@ impl Controller {
             HomeStatus::Complete => {
                 todo!()
             }
-            HomeStatus::Query => {
-                todo!("Also get paper bottom left");
+            HomeStatus::QueryPaper => {
+                if let Ok(_) = self.set_paper_origin_from_user() {
+                    self.home_status = HomeStatus::QueryPosition;
+                }
+            }
+            HomeStatus::QueryPosition => {
                 if let Ok(_) = self.set_current_position_from_user() {
-                    if self.current_position == [0, 0] {
+                    if self.current_position.um == self.paper_origin {
                         self.home_status = HomeStatus::Complete;
                     } else {
                         self.home_status = HomeStatus::Moving;
@@ -319,8 +400,8 @@ impl Controller {
                 }
             }
             HomeStatus::Moving => {
-                if self.move_to_mm(0.0, 0.0) == MoveStatus::Arrived {
-                    self.home_status = HomeStatus::Query;
+                if self.move_to(&self.paper_origin) == MoveStatus::Arrived {
+                    self.home_status = HomeStatus::QueryPosition;
                 }
             }
         }
