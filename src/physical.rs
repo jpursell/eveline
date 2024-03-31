@@ -1,12 +1,12 @@
-use crate::{motor::STEP_DIVISION, position::{PositionStep, PositionUM}};
-
+use crate::{
+    motor::STEP_DIVISION,
+    position::{PositionStep, PositionUM},
+};
 
 pub struct Physical {
     motor_pos: [PositionUM; 2],
     steps_per_mm: f64,
     max_velocity: f32,
-    max_acceleration: f32,
-    max_jerk: f32,
 }
 
 impl Physical {
@@ -31,19 +31,18 @@ impl Physical {
             motor_pos,
             steps_per_mm,
             max_velocity,
-            max_acceleration: 1.0,
-            max_jerk: 1.0,
         }
     }
     pub fn get_motor_dist(&self, um: &PositionUM) -> PositionStep {
-        let mut rr = self.motor_pos.iter()
-            .map(|mp| {
-                let r = mp.dist(um);
-                let step = r * self.steps_per_mm;
-                step.round() as usize
-            }
-        );
+        let mut rr = self.motor_pos.iter().map(|mp| {
+            let r = mp.dist(um);
+            let step = r * self.steps_per_mm;
+            step.round() as usize
+        });
         let rr = [rr.next().unwrap(), rr.next().unwrap()];
         PositionStep::new(rr)
+    }
+    pub fn get_max_velocity(&self) -> f32 {
+        self.max_velocity
     }
 }

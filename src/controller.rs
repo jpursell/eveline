@@ -1,6 +1,6 @@
 use std::{io, time::Instant};
 
-use crate::{motor::{Motor, Side}, physical::Physical, position::{Position, PositionUM}, scurve::SCurve};
+use crate::{motor::{Motor, Side}, physical::Physical, position::{Position, PositionUM}, scurve::{SCurve, SCurveSolver}};
 
 
 enum HomeStatus {
@@ -24,18 +24,23 @@ pub struct Controller {
     physical: Physical,
     move_status: MoveStatus,
     s_curve: SCurve,
+    solver: SCurveSolver,
 }
 
 impl Controller {
     pub fn new() -> Controller {
         let motors = [Side::Left, Side::Right].map(|s| Motor::new(s));
         let home_status = HomeStatus::QueryPaper;
+        let physical = Physical::new();
+        let max_acceleration = 1.0;
+        let max_jerk = 1.0;
         Controller {
             current_position: Position::default(),
             motors,
             home_status,
             paper_origin: PositionUM::default(),
-            physical: Physical::new(),
+            solver: SCurveSolver::new(&physical, max_acceleration, max_jerk),
+            physical,
             move_status: MoveStatus::Stopped,
             s_curve: SCurve::default(),
         }
