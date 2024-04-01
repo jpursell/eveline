@@ -99,18 +99,19 @@ impl Controller {
             return;
         }
         // init s-curve
-        self.s_curve = SCurve::new(self.current_position.into(), *um,Instant::now(), &self.physical);
+        todo!();
+        //self.s_curve = SCurve::new(self.current_position.into(), *um,Instant::now(), &self.physical);
         self.move_status = MoveStatus::Moving;
     }
     /// Move current position in steps to (x, y)
     fn update_move(&mut self) {
         let now = Instant::now();
-        self.move_status = self.s_curve.get_move_status(&now);
+        self.move_status = self.s_curve.get_move_status();
         if self.move_status == MoveStatus::Stopped {
             return;
         }
-        let desired = self.s_curve.get_desired(&now, &self.physical);
         todo!();
+        //let desired = self.s_curve.get_desired(&now, &self.physical);
     }
     pub fn update(&mut self) {
         match self.home_status {

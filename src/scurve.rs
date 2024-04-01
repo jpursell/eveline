@@ -69,7 +69,15 @@ impl SCurveSolver {
         }
     }
     fn solve_truncated_coast_curve(&self, start: PositionUM, end: PositionUM) -> SCurve {
-        todo!();
+        let p = start.dist(&end);
+        let t_c3 = (self.m_a * self.t_j0.powi(2) / 2.0
+            - 2.0 * self.m_a * self.t_j0 * self.t_v1
+            - self.m_a * self.t_v1.powi(2)
+            - 5.0 * self.m_j * self.t_j0.powi(3) / 2.0
+            - self.m_j * self.t_j0.powi(2) * self.t_v1
+            + p)
+            / (self.m_a * self.t_v1 + self.m_j * self.t_j0.powi(2));
+        SCurve::new(start, end, self.t_j0, self.t_v1, t_c3, self)
     }
     fn solve_truncated_max_acceleration_curve(&self, start: PositionUM, end: PositionUM) -> SCurve {
         todo!();
@@ -87,6 +95,9 @@ pub struct SCurve {
     t_v1: f64,
     t_c3: f64,
     t: [f64; 7],
+    a_j0: f64,
+    v: [f64; 7],
+    p: [f64; 7],
 }
 
 impl Default for SCurve {
@@ -99,6 +110,9 @@ impl Default for SCurve {
             t_v1: f64::default(),
             t_c3: f64::default(),
             t: [f64::default(); 7],
+            a_j0: f64::default(),
+            v: [f64::default(); 7],
+            p: [f64::default(); 7],
         }
     }
 }
@@ -110,7 +124,7 @@ impl SCurve {
         t_j0: f64,
         t_v1: f64,
         t_c3: f64,
-        physical: &Physical,
+        solver: &SCurveSolver,
     ) -> Self {
         let mut t = [0.0; 7];
         t[0] = t_j0;
@@ -120,6 +134,22 @@ impl SCurve {
         t[4] = t[3] + t_j0;
         t[5] = t[4] + t_v1;
         t[6] = t[5] + t_j0;
+        let mut v = [0.0; 7];
+        let mut p = [0.0; 7];
+        let a_j0 = solver.m_j * t_j0;
+        v[0] = solver.m_j * t_j0.powi(2) / 2.0;
+        p[0] = solver.m_j * t_j0.powi(3) / 6.0;
+        v[1] = v[0] + solver.m_a * t_v1;
+        p[1] = p[0] + v[0] * t_v1 + solver.m_a * t_v1.powi(2) / 2.0;
+        v[2] = v[1] + a_j0 * t_j0 - solver.m_j * t_j0.powi(2) / 2.0;
+        p[2] = p[1] + v[1] * t_j0 + a_j0 * t_j0.powi(2) / 2.0 - solver.m_j * t_j0.powi(3) / 6.0;
+        p[3] = p[2] + v[2] * t_c3;
+        v[4] = v[2] - solver.m_j * t_j0.powi(2) / 2.0;
+        p[4] = p[3] + v[2] * t_j0 - solver.m_j * t_j0.powi(3) / 6.0;
+        v[5] = v[4] - solver.m_a * t_v1;
+        p[5] = p[4] + v[4] * t_v1 - solver.m_a * t_v1.powi(2) / 2.0;
+        p[6] =
+            p[5] + v[5] * t_j0 - solver.m_a * t_j0.powi(2) / 2.0 + solver.m_j * t_j0.powi(3) / 6.0;
         SCurve {
             start,
             end,
@@ -128,6 +158,9 @@ impl SCurve {
             t_v1,
             t_c3,
             t,
+            a_j0,
+            v,
+            p,
         }
     }
     /// Return if we are in the process of moving or not
@@ -140,7 +173,51 @@ impl SCurve {
         }
     }
     /// Return the desired step of the motors
-    pub fn get_desired(&self, now: &Instant, physical: &Physical) -> PositionStep {
+    pub fn get_desired(&self, solver: &SCurveSolver) -> PositionStep {
+        let elasped = self.t_start.elapsed().as_secs_f64();
+        let p = if elasped < self.t[0] {
+            self.stage_0(elasped, solver)
+        } else if elasped < self.t[1] {
+            self.stage_1(elasped, solver)
+        } else if elasped < self.t[2] {
+            self.stage_2(elasped, solver)
+        } else if elasped < self.t[3] {
+            self.stage_3(elasped)
+        } else if elasped < self.t[4] {
+            self.stage_4(elasped, solver)
+        } else if elasped < self.t[5] {
+            self.stage_5(elasped, solver)
+        } else {
+            self.stage_6(elasped, solver)
+        };
         todo!();
+    }
+
+    fn stage_0(&self, elasped: f64, solver: &SCurveSolver) -> f64 {
+        solver.m_j * elasped.powi(3) / 6.0
+    }
+    fn stage_1(&self, elasped: f64, solver: &SCurveSolver) -> f64 {
+        let t = elasped - self.t[0];
+        self.p[0] + self.v[0] * t + solver.m_a * t.powi(2) / 2.0
+    }
+    fn stage_2(&self, elasped: f64, solver: &SCurveSolver) -> f64 {
+        let t = elasped - self.t[1];
+        self.p[1] + self.v[1] * t + self.a_j0 * t.powi(2) / 2.0 - solver.m_j * t.powi(3) / 6.0
+    }
+    fn stage_3(&self, elasped: f64) -> f64 {
+        let t = elasped - self.t[2];
+        self.p[2] + self.v[2] * t
+    }
+    fn stage_4(&self, elasped: f64, solver: &SCurveSolver) -> f64 {
+        let t = elasped - self.t[3];
+        self.p[3] + self.v[2] * t - solver.m_j * t.powi(3) / 6.0
+    }
+    fn stage_5(&self, elasped: f64, solver: &SCurveSolver) -> f64 {
+        let t = elasped - self.t[4];
+        self.p[4] + self.v[4] * t - solver.m_a * t.powi(2) / 2.0
+    }
+    fn stage_6(&self, elasped: f64, solver: &SCurveSolver) -> f64 {
+        let t = elasped - self.t[5];
+        self.p[5] + self.v[5] * t - solver.m_a * t.powi(2) / 2.0 + solver.m_j * t.powi(3) / 6.0
     }
 }
