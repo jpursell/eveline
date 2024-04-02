@@ -1,7 +1,11 @@
 use std::{io, time::Instant};
 
-use crate::{motor::{Motor, Side}, physical::Physical, position::{Position, PositionUM}, scurve::{SCurve, SCurveSolver}};
-
+use crate::{
+    motor::{Motor, Side},
+    physical::Physical,
+    position::{Position, PositionUM},
+    scurve::{SCurve, SCurveSolver},
+};
 
 enum HomeStatus {
     QueryPaper,
@@ -92,26 +96,28 @@ impl Controller {
         }
         Err(())
     }
-    /// Move current position in steps to (x, y)
+    /// Initialize move to new location. Set up s-curve and change status.
     fn init_move(&mut self, um: &PositionUM) {
         if *um == self.current_position {
-            self.move_status == MoveStatus::Stopped;
+            self.move_status = MoveStatus::Stopped;
             return;
         }
         // init s-curve
-        todo!();
-        //self.s_curve = SCurve::new(self.current_position.into(), *um,Instant::now(), &self.physical);
+        self.s_curve = self.solver.solve_curve(self.current_position.into(), *um);
         self.move_status = MoveStatus::Moving;
     }
     /// Move current position in steps to (x, y)
     fn update_move(&mut self) {
-        let now = Instant::now();
         self.move_status = self.s_curve.get_move_status();
         if self.move_status == MoveStatus::Stopped {
             return;
         }
-        todo!();
-        //let desired = self.s_curve.get_desired(&now, &self.physical);
+        let desired = self.s_curve.get_desired(&self.solver);
+        let remainder = desired
+            .iter()
+            .zip(self.current_position.iter_step())
+            .map(|(&desired, &current)| desired - current as f64);
+        todo!("Figure out how long to wait & move motors");
     }
     pub fn update(&mut self) {
         match self.home_status {

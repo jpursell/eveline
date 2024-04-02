@@ -3,7 +3,7 @@ use std::time::Instant;
 use crate::{
     controller::MoveStatus,
     physical::Physical,
-    position::{PositionStep, PositionUM},
+    position::{PositionStep, PositionStepFloat, PositionUM},
 };
 
 /// Solve for 7-stage s-curve
@@ -98,6 +98,7 @@ pub struct SCurve {
     a_j0: f64,
     v: [f64; 7],
     p: [f64; 7],
+    dir: [f64; 2],
 }
 
 impl Default for SCurve {
@@ -113,6 +114,7 @@ impl Default for SCurve {
             a_j0: f64::default(),
             v: [f64::default(); 7],
             p: [f64::default(); 7],
+            dir: [f64::default(); 2],
         }
     }
 }
@@ -150,6 +152,7 @@ impl SCurve {
         p[5] = p[4] + v[4] * t_v1 - solver.m_a * t_v1.powi(2) / 2.0;
         p[6] =
             p[5] + v[5] * t_j0 - solver.m_a * t_j0.powi(2) / 2.0 + solver.m_j * t_j0.powi(3) / 6.0;
+        let dir = start.get_direction(&end);
         SCurve {
             start,
             end,
@@ -161,6 +164,7 @@ impl SCurve {
             a_j0,
             v,
             p,
+            dir,
         }
     }
     /// Return if we are in the process of moving or not
@@ -173,7 +177,7 @@ impl SCurve {
         }
     }
     /// Return the desired step of the motors
-    pub fn get_desired(&self, solver: &SCurveSolver) -> PositionStep {
+    pub fn get_desired(&self, solver: &SCurveSolver) -> PositionStepFloat {
         let elasped = self.t_start.elapsed().as_secs_f64();
         let p = if elasped < self.t[0] {
             self.stage_0(elasped, solver)
@@ -190,7 +194,9 @@ impl SCurve {
         } else {
             self.stage_6(elasped, solver)
         };
-        todo!();
+        let dist = self.dir.iter().map(|d| d * p);
+        let mut desired = self.start.iter().zip(dist).map(|(s,d)| (*s as f64) / 1000.0 + d);
+        PositionStepFloat::new([desired.next().unwrap(), desired.next().unwrap()])
     }
 
     fn stage_0(&self, elasped: f64, solver: &SCurveSolver) -> f64 {
