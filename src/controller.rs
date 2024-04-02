@@ -117,7 +117,14 @@ impl Controller {
             .iter()
             .zip(self.current_position.iter_step())
             .map(|(&desired, &current)| desired - current as f64);
-        todo!("Figure out how long to wait & move motors");
+        for (num, remainder) in remainder.enumerate() {
+            assert!(remainder > 0.0);
+            if remainder < 1.0 {
+                todo!("compute hom much longer")
+            } else {
+                todo!("move motor")
+            }
+        }
     }
     pub fn update(&mut self) {
         match self.home_status {
