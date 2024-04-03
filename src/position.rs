@@ -116,3 +116,15 @@ impl From<Position> for PositionUM {
         value.um
     }
 }
+
+impl From<Position> for PositionStep {
+    fn from(value: Position) -> Self {
+        value.step
+    }
+}
+
+impl From<Position> for &PositionStep {
+    fn from(value: Position) -> Self {
+        &value.step
+    }
+}

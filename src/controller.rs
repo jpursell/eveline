@@ -1,10 +1,7 @@
-use std::{io, time::Instant};
+use std::{io, thread, time::Instant};
 
 use crate::{
-    motor::{Motor, Side},
-    physical::Physical,
-    position::{Position, PositionUM},
-    scurve::{SCurve, SCurveSolver},
+    motor::{Motor, Side}, physical::Physical, position::{Position, PositionUM}, predictor::{Prediction, Predictor}, scurve::{SCurve, SCurveSolver}
 };
 
 enum HomeStatus {
@@ -29,6 +26,7 @@ pub struct Controller {
     move_status: MoveStatus,
     s_curve: SCurve,
     solver: SCurveSolver,
+    predictor: Predictor,
 }
 
 impl Controller {
@@ -47,6 +45,7 @@ impl Controller {
             physical,
             move_status: MoveStatus::Stopped,
             s_curve: SCurve::default(),
+            predictor: Predictor::default(),
         }
     }
     fn get_position_from_user() -> Result<PositionUM, ()> {
@@ -104,6 +103,7 @@ impl Controller {
         }
         // init s-curve
         self.s_curve = self.solver.solve_curve(self.current_position.into(), *um);
+        self.predictor = Predictor::new();
         self.move_status = MoveStatus::Moving;
     }
     /// Move current position in steps to (x, y)
@@ -113,16 +113,12 @@ impl Controller {
             return;
         }
         let desired = self.s_curve.get_desired(&self.solver);
-        let remainder = desired
-            .iter()
-            .zip(self.current_position.iter_step())
-            .map(|(&desired, &current)| desired - current as f64);
-        for (num, remainder) in remainder.enumerate() {
-            assert!(remainder > 0.0);
-            if remainder < 1.0 {
-                todo!("compute hom much longer")
-            } else {
-                todo!("move motor")
+        match self.predictor.predict(self.current_position.into(), &desired) {
+            Prediction::WaitNanos(duration) => {thread::sleep(duration);}
+            Prediction::MoveMotors(instructions) => {
+                instructions.iter().zip(self.motors.iter()).for_each(|(instruction, motor)| {
+                    motor.step(instruction)
+                })
             }
         }
     }

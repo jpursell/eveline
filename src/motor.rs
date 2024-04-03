@@ -1,4 +1,3 @@
-
 use std::fmt::Display;
 
 use rppal::gpio::{Gpio, OutputPin};
@@ -8,6 +7,13 @@ const RIGHT_PINS: [u8; 4] = [4, 22, 17, 27];
 const LEFT_PINS: [u8; 4] = [12, 21, 16, 20];
 const PWM_FREQ: f64 = 200.0;
 pub const STEP_DIVISION: usize = 1;
+
+#[derive(Clone, Copy)]
+pub enum StepInstruction {
+    StepUp,
+    StepDown,
+    Hold,
+}
 
 pub struct Motor {
     pins: [OutputPin; 4],
@@ -84,6 +90,17 @@ impl Motor {
             Side::Left => self.step_counter_clock_wise(),
         };
         self.position += 1;
+    }
+    pub fn step(&self, instruction: &StepInstruction) {
+        match instruction {
+            StepInstruction::StepUp => {
+                self.step_up();
+            }
+            StepInstruction::StepDown => {
+                self.step_down();
+            }
+            StepInstruction::Hold => {}
+        }
     }
     /// Update pins for whole step mode
     fn update_pins_whole_step(&mut self) {

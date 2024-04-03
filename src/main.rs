@@ -2,6 +2,7 @@ mod controller;
 mod motor;
 mod physical;
 mod position;
+mod predictor;
 mod scurve;
 
 use crate::controller::Controller;
