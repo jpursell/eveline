@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use crate::{motor::StepInstruction, position::{PositionStep, PositionStepFloat}};
 
 pub enum Prediction {
-    WaitNanos(Duration),
+    Wait(Duration),
     MoveMotors([StepInstruction;2]),
 }
 
@@ -43,25 +43,33 @@ impl Predictor {
                 StepInstruction::Hold
             }
         });
-        todo!("Finish this. We need to make sure we update last_instant, last_remainder even if we are moving now. Put in code for sleep prediction.")
-        // let mut max_remainder: f64 = 0.0;
-        // for (num, &remainder) in remainder.iter().enumerate() {
-        //     if remainder > 1.0 {
-        //         instructions[num] = StepInstruction::StepUp;
-        //         move_now = true;
-        //     } else if remainder < -1.0 {
-        //         instructions[num] = StepInstruction::StepDown;
-        //         move_now = true;
-        //     } else {
-        //         max_remainder = max_remainder.max(remainder.abs());
-        //     }
-        // }
+        let wait_time = if !move_now {
+            // r0 = m * t0 + b
+            // sub 0 for t0
+            // r0 = b
+            let remainder_diff = remainders.iter().zip(self.last_remainder.iter()).map(|(r, lr)| r - lr);
+            let time_diff = self.last_instant.elapsed().as_secs_f64();
+            let m = remainder_diff.map(|rd| rd / time_diff);
+            // r = m dt + r0
+            // dt = (sign(m) - r0)/m
+            let mut pred_time = m.zip(self.last_remainder.iter()).map(|(m, r0)| {
+                let sign_m = if m > 0.0 {
+                    1.0
+                } else {
+                    -1.0
+                };
+                (sign_m - r0) / m
+            });
+            let pred_time = [pred_time.next().unwrap(), pred_time.next().unwrap()];
+            pred_time[0].min(pred_time[1])
+        } else {
+            0.0
+        };
+        self.last_instant = Instant::now();
+        self.last_remainder = remainders;
         if move_now {
             return Prediction::MoveMotors(instructions);
         }
-
-        let since = self.last.elapsed().as_secs_f64();
-        let advancement = max_remainder
-        Prediction::WaitNanos(Duration::from_secs_f64(0.0))
+        Prediction::Wait(Duration::from_secs_f64(wait_time))
     }
 }

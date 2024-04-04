@@ -80,10 +80,21 @@ impl SCurveSolver {
         SCurve::new(start, end, self.t_j0, self.t_v1, t_c3, self)
     }
     fn solve_truncated_max_acceleration_curve(&self, start: PositionUM, end: PositionUM) -> SCurve {
-        todo!();
+        let p = start.dist(&end);
+        let t_v1 = (-self.t_j0 * (2.0 * self.m_a + self.m_j * self.t_j0)
+            + (6.0 * self.m_a.powi(2) * self.t_j0.powi(2)
+                - 6.0 * self.m_a * self.m_j * self.t_j0.powi(3)
+                + 4.0 * self.m_a * p
+                + self.m_j.powi(2) * self.t_j0.powi(4))
+            .sqrt())
+            / (2.0 * self.m_a);
+        assert!(t_v1 > 0.0, "Need to add in second solution");
+        SCurve::new(start, end, self.t_j0, t_v1, 0.0, self)
     }
     fn solve_truncated_max_jerk_curve(&self, start: PositionUM, end: PositionUM) -> SCurve {
-        todo!();
+        let p = start.dist(&end);
+        let t_j0 = 2.0_f64.powf(2.0/3.0)*(p/self.m_j).powf(1.0/3.0)/2.0;
+        SCurve::new(start, end, t_j0, 0.0, 0.0, self)
     }
 }
 
@@ -195,7 +206,11 @@ impl SCurve {
             self.stage_6(elasped, solver)
         };
         let dist = self.dir.iter().map(|d| d * p);
-        let mut desired = self.start.iter().zip(dist).map(|(s,d)| (*s as f64) / 1000.0 + d);
+        let mut desired = self
+            .start
+            .iter()
+            .zip(dist)
+            .map(|(s, d)| (*s as f64) / 1000.0 + d);
         PositionStepFloat::new([desired.next().unwrap(), desired.next().unwrap()])
     }
 
