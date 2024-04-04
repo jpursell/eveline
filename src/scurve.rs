@@ -1,9 +1,9 @@
-use std::time::Instant;
+use std::{fmt::Display, time::Instant};
 
 use crate::{
     controller::MoveStatus,
     physical::Physical,
-    position::{PositionStep, PositionStepFloat, PositionUM},
+    position::{PositionStepFloat, PositionUM},
 };
 
 /// Solve for 7-stage s-curve
@@ -17,7 +17,7 @@ use crate::{
 /// stage_6: max_jerk until zero acceleration and zero velocity
 pub struct SCurveSolver {
     /// Max velocity
-    m_v: f64,
+    // m_v: f64,
     /// Max acceleration
     m_a: f64,
     /// Max jerk
@@ -30,6 +30,21 @@ pub struct SCurveSolver {
     min_dist_truncated_coast: f64,
     /// The minimum distance in mm of a truncated max_accerleration (mid) s-curve
     min_dist_truncated_max_acceleration: f64,
+}
+
+impl Display for SCurveSolver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "m_a: {}, m_j: {}, t_j0: {}, t_v1: {}, min_dist_full: {}, min_dist_mid: {}",
+            self.m_a,
+            self.m_j,
+            self.t_j0,
+            self.t_v1,
+            self.min_dist_truncated_coast,
+            self.min_dist_truncated_max_acceleration
+        )
+    }
 }
 
 impl SCurveSolver {
@@ -49,7 +64,7 @@ impl SCurveSolver {
             -m_a * t_j0.powi(2) / 2.0 + 5.0 * m_j * t_j0.powi(3) / 2.0;
         assert!(min_dist_truncated_coast >= min_dist_truncated_max_acceleration);
         SCurveSolver {
-            m_v,
+            // m_v,
             m_a,
             m_j,
             t_j0,
@@ -93,18 +108,18 @@ impl SCurveSolver {
     }
     fn solve_truncated_max_jerk_curve(&self, start: PositionUM, end: PositionUM) -> SCurve {
         let p = start.dist(&end);
-        let t_j0 = 2.0_f64.powf(2.0/3.0)*(p/self.m_j).powf(1.0/3.0)/2.0;
+        let t_j0 = 2.0_f64.powf(2.0 / 3.0) * (p / self.m_j).powf(1.0 / 3.0) / 2.0;
         SCurve::new(start, end, t_j0, 0.0, 0.0, self)
     }
 }
 
 pub struct SCurve {
     start: PositionUM,
-    end: PositionUM,
+    // end: PositionUM,
     t_start: Instant,
-    t_j0: f64,
-    t_v1: f64,
-    t_c3: f64,
+    // t_j0: f64,
+    // t_v1: f64,
+    // t_c3: f64,
     t: [f64; 7],
     a_j0: f64,
     v: [f64; 7],
@@ -112,15 +127,36 @@ pub struct SCurve {
     dir: [f64; 2],
 }
 
+impl Display for SCurve {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let print_arr = |a: &[f64]| {
+            a.iter()
+                .map(|x| format!("{:.2}", x))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        write!(
+            f,
+            "start: {}, t:[{}], a_j0: {}, v: [{}], p: [{}], dir: [{}]",
+            self.start,
+            print_arr(&self.t),
+            self.a_j0,
+            print_arr(&self.v),
+            print_arr(&self.p),
+            print_arr(&self.dir),
+        )
+    }
+}
+
 impl Default for SCurve {
     fn default() -> Self {
         SCurve {
             start: PositionUM::default(),
-            end: PositionUM::default(),
+            // end: PositionUM::default(),
             t_start: Instant::now(),
-            t_j0: f64::default(),
-            t_v1: f64::default(),
-            t_c3: f64::default(),
+            // t_j0: f64::default(),
+            // t_v1: f64::default(),
+            // t_c3: f64::default(),
             t: [f64::default(); 7],
             a_j0: f64::default(),
             v: [f64::default(); 7],
@@ -157,20 +193,21 @@ impl SCurve {
         v[2] = v[1] + a_j0 * t_j0 - solver.m_j * t_j0.powi(2) / 2.0;
         p[2] = p[1] + v[1] * t_j0 + a_j0 * t_j0.powi(2) / 2.0 - solver.m_j * t_j0.powi(3) / 6.0;
         p[3] = p[2] + v[2] * t_c3;
+        let a_j4 = -solver.m_j * t_j0;
         v[4] = v[2] - solver.m_j * t_j0.powi(2) / 2.0;
         p[4] = p[3] + v[2] * t_j0 - solver.m_j * t_j0.powi(3) / 6.0;
         v[5] = v[4] - solver.m_a * t_v1;
         p[5] = p[4] + v[4] * t_v1 - solver.m_a * t_v1.powi(2) / 2.0;
         p[6] =
-            p[5] + v[5] * t_j0 - solver.m_a * t_j0.powi(2) / 2.0 + solver.m_j * t_j0.powi(3) / 6.0;
+            p[5] + v[5] * t_j0 + a_j4 * t_j0.powi(2) / 2.0 + solver.m_j * t_j0.powi(3) / 6.0;
         let dir = start.get_direction(&end);
         SCurve {
             start,
-            end,
+            // end,
             t_start: Instant::now(),
-            t_j0,
-            t_v1,
-            t_c3,
+            // t_j0,
+            // t_v1,
+            // t_c3,
             t,
             a_j0,
             v,

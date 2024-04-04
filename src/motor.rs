@@ -91,7 +91,7 @@ impl Motor {
         };
         self.position += 1;
     }
-    pub fn step(&self, instruction: &StepInstruction) {
+    pub fn step(&mut self, instruction: &StepInstruction) {
         match instruction {
             StepInstruction::StepUp => {
                 self.step_up();

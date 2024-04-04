@@ -1,10 +1,13 @@
 use std::time::{Duration, Instant};
 
-use crate::{motor::StepInstruction, position::{PositionStep, PositionStepFloat}};
+use crate::{
+    motor::StepInstruction,
+    position::{Position, PositionStepFloat},
+};
 
 pub enum Prediction {
     Wait(Duration),
-    MoveMotors([StepInstruction;2]),
+    MoveMotors([StepInstruction; 2]),
 }
 
 pub struct Predictor {
@@ -25,14 +28,18 @@ impl Predictor {
     pub fn new() -> Self {
         Predictor::default()
     }
-    pub fn predict(&self, current_position: &PositionStep, desired: &PositionStepFloat) -> Prediction {
+    pub fn predict(
+        &mut self,
+        current_position: &Position,
+        desired: &PositionStepFloat,
+    ) -> Prediction {
         let mut remainders = desired
             .iter()
-            .zip(current_position.iter())
+            .zip(current_position.iter_step())
             .map(|(&desired, &current)| desired - current as f64);
         let remainders = [remainders.next().unwrap(), remainders.next().unwrap()];
         let mut move_now = false;
-        let instructions = remainders.map(|r|{
+        let instructions = remainders.map(|r| {
             if r > 1.0 {
                 move_now = true;
                 StepInstruction::StepUp
@@ -47,17 +54,16 @@ impl Predictor {
             // r0 = m * t0 + b
             // sub 0 for t0
             // r0 = b
-            let remainder_diff = remainders.iter().zip(self.last_remainder.iter()).map(|(r, lr)| r - lr);
+            let remainder_diff = remainders
+                .iter()
+                .zip(self.last_remainder.iter())
+                .map(|(r, lr)| r - lr);
             let time_diff = self.last_instant.elapsed().as_secs_f64();
             let m = remainder_diff.map(|rd| rd / time_diff);
             // r = m dt + r0
             // dt = (sign(m) - r0)/m
             let mut pred_time = m.zip(self.last_remainder.iter()).map(|(m, r0)| {
-                let sign_m = if m > 0.0 {
-                    1.0
-                } else {
-                    -1.0
-                };
+                let sign_m = if m > 0.0 { 1.0 } else { -1.0 };
                 (sign_m - r0) / m
             });
             let pred_time = [pred_time.next().unwrap(), pred_time.next().unwrap()];

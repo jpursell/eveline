@@ -1,7 +1,11 @@
-use std::{io, thread, time::Instant};
+use std::{io, thread};
 
 use crate::{
-    motor::{Motor, Side}, physical::Physical, position::{Position, PositionUM}, predictor::{Prediction, Predictor}, scurve::{SCurve, SCurveSolver}
+    motor::{Motor, Side},
+    physical::Physical,
+    position::{Position, PositionUM},
+    predictor::{Prediction, Predictor},
+    scurve::{SCurve, SCurveSolver},
 };
 
 enum HomeStatus {
@@ -36,12 +40,14 @@ impl Controller {
         let physical = Physical::new();
         let max_acceleration = 1.0;
         let max_jerk = 1.0;
+        let solver = SCurveSolver::new(&physical, max_acceleration, max_jerk);
+        println!("solver: {}", solver);
         Controller {
             current_position: Position::default(),
             motors,
             home_status,
             paper_origin: PositionUM::default(),
-            solver: SCurveSolver::new(&physical, max_acceleration, max_jerk),
+            solver,
             physical,
             move_status: MoveStatus::Stopped,
             s_curve: SCurve::default(),
@@ -64,10 +70,12 @@ impl Controller {
             println!("got {}, {}", xy_s[0], xy_s[1]);
             let mut xy_f: [f32; 2] = [0.0, 0.0];
             for (s, f) in xy_s.iter().zip(xy_f.iter_mut()) {
-                let Ok(f) = s.parse::<f32>() else {
+                if let Ok(pf) = s.parse::<f32>() {
+                    *f = pf;
+                } else {
                     println!("Failed to parse \"{}\"", s);
                     return Err(());
-                };
+                }
             }
             xy_f
         };
@@ -97,12 +105,14 @@ impl Controller {
     }
     /// Initialize move to new location. Set up s-curve and change status.
     fn init_move(&mut self, um: &PositionUM) {
+        println!("init_move");
         if *um == self.current_position {
             self.move_status = MoveStatus::Stopped;
             return;
         }
         // init s-curve
         self.s_curve = self.solver.solve_curve(self.current_position.into(), *um);
+        println!("s-curve {}", self.s_curve);
         self.predictor = Predictor::new();
         self.move_status = MoveStatus::Moving;
     }
@@ -113,12 +123,15 @@ impl Controller {
             return;
         }
         let desired = self.s_curve.get_desired(&self.solver);
-        match self.predictor.predict(self.current_position.into(), &desired) {
-            Prediction::WaitNanos(duration) => {thread::sleep(duration);}
+        match self.predictor.predict(&self.current_position, &desired) {
+            Prediction::Wait(duration) => {
+                thread::sleep(duration);
+            }
             Prediction::MoveMotors(instructions) => {
-                instructions.iter().zip(self.motors.iter()).for_each(|(instruction, motor)| {
-                    motor.step(instruction)
-                })
+                instructions
+                    .iter()
+                    .zip(self.motors.iter_mut())
+                    .for_each(|(instruction, motor)| motor.step(instruction));
             }
         }
     }

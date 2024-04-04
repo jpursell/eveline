@@ -1,10 +1,16 @@
-use std::ops::Index;
+use std::{fmt::Display, ops::Index};
 
 use crate::physical::Physical;
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct PositionUM {
     xy: [usize; 2],
+}
+
+impl Display for PositionUM {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "xy: [{}, {}]", self.xy[0], self.xy[1])
+    }
 }
 
 impl PositionUM {
@@ -66,7 +72,7 @@ pub struct PositionStepFloat {
 
 impl PositionStepFloat {
     pub fn new(rr: [f64; 2]) -> Self {
-        PositionStepFloat{rr}
+        PositionStepFloat { rr }
     }
     pub fn iter(&self) -> impl Iterator<Item = &f64> {
         self.rr.iter()
@@ -83,18 +89,18 @@ impl Position {
     pub fn new(um: PositionUM, step: PositionStep) -> Self {
         Position { um, step }
     }
-    pub fn from_mm(xy: [f32; 2], physical: &Physical) -> Self {
-        let um = PositionUM::from_mm(xy);
-        Self::from_um(um, physical)
-    }
+    // pub fn from_mm(xy: [f32; 2], physical: &Physical) -> Self {
+    //     let um = PositionUM::from_mm(xy);
+    //     Self::from_um(um, physical)
+    // }
     pub fn from_um(um: PositionUM, physical: &Physical) -> Self {
         let rr = physical.get_motor_dist(&um);
         Position::new(um, rr)
     }
     /// Distance in mm
-    pub fn dist(&self, um: &PositionUM) -> f64 {
-        self.um.dist(um)
-    }
+    // pub fn dist(&self, um: &PositionUM) -> f64 {
+    //     self.um.dist(um)
+    // }
     pub fn iter_step(&self) -> impl Iterator<Item = &usize> {
         self.step.iter()
     }
@@ -120,11 +126,5 @@ impl From<Position> for PositionUM {
 impl From<Position> for PositionStep {
     fn from(value: Position) -> Self {
         value.step
-    }
-}
-
-impl From<Position> for &PositionStep {
-    fn from(value: Position) -> Self {
-        &value.step
     }
 }
