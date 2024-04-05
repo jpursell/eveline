@@ -36,6 +36,7 @@ pub struct Controller {
 impl Controller {
     pub fn new() -> Controller {
         let motors = [Side::Left, Side::Right].map(|s| Motor::new(s));
+        todo!("Add debug/jog mode for stepping, moving");
         let home_status = HomeStatus::QueryPaper;
         let physical = Physical::new();
         let max_acceleration = 1.0;
