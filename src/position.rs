@@ -1,6 +1,6 @@
 use std::{fmt::Display, ops::Index};
 
-use crate::physical::Physical;
+use crate::{motor::StepInstruction, physical::Physical};
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct PositionUM {
@@ -50,12 +50,25 @@ pub struct PositionStep {
     rr: [usize; 2],
 }
 
+impl Display for PositionStep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "rr:[{}, {}]", self.rr[0], self.rr[1])
+    }
+}
+
 impl PositionStep {
     pub fn new(rr: [usize; 2]) -> Self {
         PositionStep { rr }
     }
     pub fn iter(&self) -> impl Iterator<Item = &usize> {
         self.rr.iter()
+    }
+    pub fn step(&mut self, index: usize, instruction: &StepInstruction) {
+        match instruction {
+            StepInstruction::StepUp => {self.rr[index] += 1;}
+            StepInstruction::StepDown => {self.rr[index] -= 1;}
+            StepInstruction::Hold => {},
+        }
     }
 }
 
@@ -85,6 +98,12 @@ pub struct Position {
     step: PositionStep,
 }
 
+impl Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "um:[{}], step:[{}]", self.um, self.step)
+    }
+}
+
 impl Position {
     pub fn new(um: PositionUM, step: PositionStep) -> Self {
         Position { um, step }
@@ -93,9 +112,23 @@ impl Position {
     //     let um = PositionUM::from_mm(xy);
     //     Self::from_um(um, physical)
     // }
+    pub fn from_step(step: PositionStep, physical: &Physical) -> Self {
+        let r_m0 = (step[0] as f64) / 1000.0;
+        let r_m1 = (step[1] as f64) / 1000.0;
+        // solved for let motor_pos = [mm([0.0, 368.8]), mm([297.0, 368.8])];
+        let x = 0.00168350168350168 * r_m0.powi(2) - 0.00168350168350168*r_m1.powi(2) + 148.5;
+        let x_m0 = physical.get_motor_position(0)[0] as f64 / 1000.0;
+        let y_m0 = physical.get_motor_position(0)[1] as f64 / 1000.0;
+        let y = (r_m0.powi(2) - (x - x_m0).powi(2)).sqrt() + y_m0;
+        let um = PositionUM::from_mm([x as f32, y as f32]);
+        Position::new(um, step)
+    }
     pub fn from_um(um: PositionUM, physical: &Physical) -> Self {
         let rr = physical.get_motor_dist(&um);
         Position::new(um, rr)
+    }
+    pub fn get_step(&self) -> &PositionStep {
+        &self.step
     }
     /// Distance in mm
     // pub fn dist(&self, um: &PositionUM) -> f64 {

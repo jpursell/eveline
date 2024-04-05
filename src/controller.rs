@@ -3,7 +3,7 @@ use std::{io, thread};
 use crate::{
     motor::{Motor, Side},
     physical::Physical,
-    position::{Position, PositionUM},
+    position::{Position, PositionStep, PositionUM},
     predictor::{Prediction, Predictor},
     scurve::{SCurve, SCurveSolver},
 };
@@ -83,7 +83,7 @@ impl Controller {
     }
     fn set_current_position_from_user(&mut self) -> Result<(), ()> {
         println!("What's the current position in mm? provide \"x,y\"");
-        for _ in 0..4 {
+        for _ in 0..1 {
             if let Ok(um) = Controller::get_position_from_user() {
                 self.current_position = Position::from_um(um, &self.physical);
                 return Ok(());
@@ -95,7 +95,7 @@ impl Controller {
         println!(
             "What's the location of the lower left corner of the paper in mm? provide \"x,y\""
         );
-        for _ in 0..4 {
+        for _ in 0..1 {
             if let Ok(um) = Controller::get_position_from_user() {
                 self.paper_origin = um;
                 return Ok(());
@@ -128,10 +128,16 @@ impl Controller {
                 thread::sleep(duration);
             }
             Prediction::MoveMotors(instructions) => {
+                let mut step: PositionStep = self.current_position.get_step().to_owned();
                 instructions
-                    .iter()
-                    .zip(self.motors.iter_mut())
-                    .for_each(|(instruction, motor)| motor.step(instruction));
+                .iter()
+                .enumerate()
+                .for_each(|(i, instruction)|{
+                    self.motors[i].step(instruction);
+                    step.step(i, instruction);
+                });
+                self.current_position = Position::from_step(step, &self.physical);
+                println!("new position {}", self.current_position);
             }
         }
     }

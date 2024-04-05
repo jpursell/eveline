@@ -42,6 +42,9 @@ impl Physical {
         let rr = [rr.next().unwrap(), rr.next().unwrap()];
         PositionStep::new(rr)
     }
+    pub fn get_motor_position(&self, index: usize) -> &PositionUM {
+        &self.motor_pos[index]
+    }
     pub fn get_max_velocity(&self) -> f32 {
         self.max_velocity
     }
