@@ -243,6 +243,7 @@ impl SCurve {
             self.stage_6(elasped, solver)
         };
         let dist = self.dir.iter().map(|d| d * p);
+        todo!("Find 1000 everywhere and replace with official conversion");
         let mut desired = self
             .start
             .iter()

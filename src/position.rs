@@ -113,14 +113,16 @@ impl Position {
     //     Self::from_um(um, physical)
     // }
     pub fn from_step(step: PositionStep, physical: &Physical) -> Self {
-        let r_m0 = (step[0] as f64) / 1000.0;
-        let r_m1 = (step[1] as f64) / 1000.0;
+        let stepf: PositionStepFloat = step.into();
+        let r_m0 = stepf[0];
+        let r_m1 = stepf[1];
         // solved for let motor_pos = [mm([0.0, 368.8]), mm([297.0, 368.8])];
         let x = 0.00168350168350168 * r_m0.powi(2) - 0.00168350168350168*r_m1.powi(2) + 148.5;
-        let x_m0 = physical.get_motor_position(0)[0] as f64 / 1000.0;
-        let y_m0 = physical.get_motor_position(0)[1] as f64 / 1000.0;
+        let pos_m0: PositionMM = physical.get_motor_position(0).into();
+        let x_m0:f64 = pos_m0[0];
+        let y_m0:f64 = pos_m0[1];
         let y = (r_m0.powi(2) - (x - x_m0).powi(2)).sqrt() + y_m0;
-        let um = PositionUM::from_mm([x as f32, y as f32]);
+        let um = PositionUM::from_mm([x, y]);
         Position::new(um, step)
     }
     pub fn from_um(um: PositionUM, physical: &Physical) -> Self {
