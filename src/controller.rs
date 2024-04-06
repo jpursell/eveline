@@ -1,14 +1,15 @@
-use std::{io, thread};
+use std::{io, thread, time::Duration};
 
 use crate::{
-    motor::{Motor, Side},
+    motor::{Motor, Side, StepInstruction},
     physical::Physical,
-    position::{Position, PositionStep, PositionUM},
+    position::{Position, PositionStep, PositionMM},
     predictor::{Prediction, Predictor},
     scurve::{SCurve, SCurveSolver},
 };
 
-enum HomeStatus {
+enum ControllerMode {
+    Step,
     QueryPaper,
     QueryPosition,
     Moving,
@@ -23,9 +24,10 @@ pub enum MoveStatus {
 
 pub struct Controller {
     current_position: Position,
+    current_position_initialized: bool,
     motors: [Motor; 2],
-    home_status: HomeStatus,
-    paper_origin: PositionUM,
+    mode: ControllerMode,
+    paper_origin: PositionMM,
     physical: Physical,
     move_status: MoveStatus,
     s_curve: SCurve,
@@ -36,18 +38,18 @@ pub struct Controller {
 impl Controller {
     pub fn new() -> Controller {
         let motors = [Side::Left, Side::Right].map(|s| Motor::new(s));
-        todo!("Add debug/jog mode for stepping, moving");
-        let home_status = HomeStatus::QueryPaper;
         let physical = Physical::new();
+        println!("Physical: {}", physical);
         let max_acceleration = 1.0;
         let max_jerk = 1.0;
         let solver = SCurveSolver::new(&physical, max_acceleration, max_jerk);
         println!("solver: {}", solver);
         Controller {
             current_position: Position::default(),
+            current_position_initialized: false,
             motors,
-            home_status,
-            paper_origin: PositionUM::default(),
+            mode: ControllerMode::Step,
+            paper_origin: PositionMM::default(),
             solver,
             physical,
             move_status: MoveStatus::Stopped,
@@ -55,7 +57,7 @@ impl Controller {
             predictor: Predictor::default(),
         }
     }
-    fn get_position_from_user() -> Result<PositionUM, ()> {
+    fn get_position_from_user() -> Result<PositionMM, ()> {
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             println!("error: {error}");
@@ -69,9 +71,9 @@ impl Controller {
             };
             let xy_s = [xy_s.0, xy_s.1];
             println!("got {}, {}", xy_s[0], xy_s[1]);
-            let mut xy_f: [f32; 2] = [0.0, 0.0];
+            let mut xy_f: [f64; 2] = [0.0, 0.0];
             for (s, f) in xy_s.iter().zip(xy_f.iter_mut()) {
-                if let Ok(pf) = s.parse::<f32>() {
+                if let Ok(pf) = s.parse::<f64>() {
                     *f = pf;
                 } else {
                     println!("Failed to parse \"{}\"", s);
@@ -80,13 +82,15 @@ impl Controller {
             }
             xy_f
         };
-        Ok(PositionUM::from_mm(xy))
+        Ok(PositionMM::new(xy))
     }
     fn set_current_position_from_user(&mut self) -> Result<(), ()> {
         println!("What's the current position in mm? provide \"x,y\"");
         for _ in 0..1 {
-            if let Ok(um) = Controller::get_position_from_user() {
-                self.current_position = Position::from_um(um, &self.physical);
+            if let Ok(mm) = Controller::get_position_from_user() {
+                self.current_position = Position::from_mm(mm, &self.physical);
+                self.current_position_initialized = true;
+                println!("position set to {}", self.current_position);
                 return Ok(());
             }
         }
@@ -97,22 +101,22 @@ impl Controller {
             "What's the location of the lower left corner of the paper in mm? provide \"x,y\""
         );
         for _ in 0..1 {
-            if let Ok(um) = Controller::get_position_from_user() {
-                self.paper_origin = um;
+            if let Ok(mm) = Controller::get_position_from_user() {
+                self.paper_origin = mm;
                 return Ok(());
             }
         }
         Err(())
     }
     /// Initialize move to new location. Set up s-curve and change status.
-    fn init_move(&mut self, um: &PositionUM) {
+    fn init_move(&mut self, mm: &PositionMM) {
         println!("init_move");
-        if *um == self.current_position {
+        if *mm == self.current_position {
             self.move_status = MoveStatus::Stopped;
             return;
         }
         // init s-curve
-        self.s_curve = self.solver.solve_curve(self.current_position.into(), *um);
+        self.s_curve = self.solver.solve_curve(self.current_position.into(), *mm);
         println!("s-curve {}", self.s_curve);
         self.predictor = Predictor::new();
         self.move_status = MoveStatus::Moving;
@@ -129,43 +133,59 @@ impl Controller {
                 thread::sleep(duration);
             }
             Prediction::MoveMotors(instructions) => {
-                let mut step: PositionStep = self.current_position.get_step().to_owned();
-                instructions
-                .iter()
-                .enumerate()
-                .for_each(|(i, instruction)|{
-                    self.motors[i].step(instruction);
-                    step.step(i, instruction);
-                });
-                self.current_position = Position::from_step(step, &self.physical);
-                println!("new position {}", self.current_position);
+                self.implement_step_instructions(instructions);
             }
         }
     }
+    fn implement_step_instructions(&mut self, instructions: [StepInstruction; 2]) {
+        let mut step: PositionStep = self.current_position.get_step().to_owned();
+        instructions
+            .iter()
+            .enumerate()
+            .for_each(|(i, instruction)| {
+                self.motors[i].step(instruction);
+                step.step(i, instruction);
+            });
+        self.current_position = Position::from_step(step, &self.physical);
+        println!("new position {}", self.current_position);
+    }
+    fn step(&mut self) {
+        if !self.current_position_initialized {
+            let _ = self.set_current_position_from_user();
+            return;
+        }
+        self.implement_step_instructions([StepInstruction::StepUp; 2]);
+        thread::sleep(Duration::from_secs_f64(0.5));
+        self.implement_step_instructions([StepInstruction::StepDown; 2]);
+        thread::sleep(Duration::from_secs_f64(0.5));
+    }
     pub fn update(&mut self) {
-        match self.home_status {
-            HomeStatus::Complete => {
+        match self.mode {
+            ControllerMode::Step => {
+                self.step();
+            }
+            ControllerMode::Complete => {
                 todo!()
             }
-            HomeStatus::QueryPaper => {
+            ControllerMode::QueryPaper => {
                 if let Ok(_) = self.set_paper_origin_from_user() {
-                    self.home_status = HomeStatus::QueryPosition;
+                    self.mode = ControllerMode::QueryPosition;
                 }
             }
-            HomeStatus::QueryPosition => {
+            ControllerMode::QueryPosition => {
                 if let Ok(_) = self.set_current_position_from_user() {
                     if self.current_position == self.paper_origin {
-                        self.home_status = HomeStatus::Complete;
+                        self.mode = ControllerMode::Complete;
                     } else {
                         self.init_move(&self.paper_origin.clone());
-                        self.home_status = HomeStatus::Moving;
+                        self.mode = ControllerMode::Moving;
                     }
                 }
             }
-            HomeStatus::Moving => {
+            ControllerMode::Moving => {
                 self.update_move();
                 if self.move_status == MoveStatus::Stopped {
-                    self.home_status = HomeStatus::QueryPosition;
+                    self.mode = ControllerMode::QueryPosition;
                 }
             }
         }

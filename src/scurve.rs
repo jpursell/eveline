@@ -3,7 +3,7 @@ use std::{fmt::Display, time::Instant};
 use crate::{
     controller::MoveStatus,
     physical::Physical,
-    position::{PositionStepFloat, PositionUM},
+    position::{PositionMM, PositionStepFloat},
 };
 
 /// Solve for 7-stage s-curve
@@ -73,7 +73,7 @@ impl SCurveSolver {
             min_dist_truncated_max_acceleration,
         }
     }
-    pub fn solve_curve(&self, start: PositionUM, end: PositionUM) -> SCurve {
+    pub fn solve_curve(&self, start: PositionMM, end: PositionMM) -> SCurve {
         let dist = start.dist(&end);
         if dist >= self.min_dist_truncated_coast {
             self.solve_truncated_coast_curve(start, end)
@@ -83,7 +83,7 @@ impl SCurveSolver {
             self.solve_truncated_max_jerk_curve(start, end)
         }
     }
-    fn solve_truncated_coast_curve(&self, start: PositionUM, end: PositionUM) -> SCurve {
+    fn solve_truncated_coast_curve(&self, start: PositionMM, end: PositionMM) -> SCurve {
         let p = start.dist(&end);
         let t_c3 = (self.m_a * self.t_j0.powi(2) / 2.0
             - 2.0 * self.m_a * self.t_j0 * self.t_v1
@@ -94,7 +94,7 @@ impl SCurveSolver {
             / (self.m_a * self.t_v1 + self.m_j * self.t_j0.powi(2));
         SCurve::new(start, end, self.t_j0, self.t_v1, t_c3, self)
     }
-    fn solve_truncated_max_acceleration_curve(&self, start: PositionUM, end: PositionUM) -> SCurve {
+    fn solve_truncated_max_acceleration_curve(&self, start: PositionMM, end: PositionMM) -> SCurve {
         let p = start.dist(&end);
         let t_v1 = (-self.t_j0 * (2.0 * self.m_a + self.m_j * self.t_j0)
             + (6.0 * self.m_a.powi(2) * self.t_j0.powi(2)
@@ -106,7 +106,7 @@ impl SCurveSolver {
         assert!(t_v1 > 0.0, "Need to add in second solution");
         SCurve::new(start, end, self.t_j0, t_v1, 0.0, self)
     }
-    fn solve_truncated_max_jerk_curve(&self, start: PositionUM, end: PositionUM) -> SCurve {
+    fn solve_truncated_max_jerk_curve(&self, start: PositionMM, end: PositionMM) -> SCurve {
         let p = start.dist(&end);
         let t_j0 = 2.0_f64.powf(2.0 / 3.0) * (p / self.m_j).powf(1.0 / 3.0) / 2.0;
         SCurve::new(start, end, t_j0, 0.0, 0.0, self)
@@ -114,12 +114,8 @@ impl SCurveSolver {
 }
 
 pub struct SCurve {
-    start: PositionUM,
-    // end: PositionUM,
+    start: PositionMM,
     t_start: Instant,
-    // t_j0: f64,
-    // t_v1: f64,
-    // t_c3: f64,
     t: [f64; 7],
     a_j0: f64,
     v: [f64; 7],
@@ -151,12 +147,8 @@ impl Display for SCurve {
 impl Default for SCurve {
     fn default() -> Self {
         SCurve {
-            start: PositionUM::default(),
-            // end: PositionUM::default(),
+            start: PositionMM::default(),
             t_start: Instant::now(),
-            // t_j0: f64::default(),
-            // t_v1: f64::default(),
-            // t_c3: f64::default(),
             t: [f64::default(); 7],
             a_j0: f64::default(),
             v: [f64::default(); 7],
@@ -168,8 +160,8 @@ impl Default for SCurve {
 
 impl SCurve {
     pub fn new(
-        start: PositionUM,
-        end: PositionUM,
+        start: PositionMM,
+        end: PositionMM,
         t_j0: f64,
         t_v1: f64,
         t_c3: f64,
@@ -198,16 +190,11 @@ impl SCurve {
         p[4] = p[3] + v[2] * t_j0 - solver.m_j * t_j0.powi(3) / 6.0;
         v[5] = v[4] - solver.m_a * t_v1;
         p[5] = p[4] + v[4] * t_v1 - solver.m_a * t_v1.powi(2) / 2.0;
-        p[6] =
-            p[5] + v[5] * t_j0 + a_j4 * t_j0.powi(2) / 2.0 + solver.m_j * t_j0.powi(3) / 6.0;
+        p[6] = p[5] + v[5] * t_j0 + a_j4 * t_j0.powi(2) / 2.0 + solver.m_j * t_j0.powi(3) / 6.0;
         let dir = start.get_direction(&end);
         SCurve {
-            start,
-            // end,
+            start: start,
             t_start: Instant::now(),
-            // t_j0,
-            // t_v1,
-            // t_c3,
             t,
             a_j0,
             v,
@@ -243,12 +230,7 @@ impl SCurve {
             self.stage_6(elasped, solver)
         };
         let dist = self.dir.iter().map(|d| d * p);
-        todo!("Find 1000 everywhere and replace with official conversion");
-        let mut desired = self
-            .start
-            .iter()
-            .zip(dist)
-            .map(|(s, d)| (*s as f64) / 1000.0 + d);
+        let mut desired = self.start.iter().zip(dist).map(|(&s, d)| s + d);
         PositionStepFloat::new([desired.next().unwrap(), desired.next().unwrap()])
     }
 

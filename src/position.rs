@@ -2,44 +2,40 @@ use std::{fmt::Display, ops::Index};
 
 use crate::{motor::StepInstruction, physical::Physical};
 
-#[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-pub struct PositionUM {
-    xy: [usize; 2],
+#[derive(Default, Copy, Clone)]
+pub struct PositionMM {
+    xy: [f64; 2],
 }
 
-impl Display for PositionUM {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "xy: [{}, {}]", self.xy[0], self.xy[1])
+impl PositionMM {
+    pub fn new(xy: [f64; 2]) -> Self {
+        PositionMM { xy }
     }
-}
-
-impl PositionUM {
-    pub fn new(xy: [usize; 2]) -> Self {
-        PositionUM { xy }
-    }
-    pub fn from_mm(xy: [f32; 2]) -> Self {
-        Self::new(xy.map(|p| (p * 1000.0).round() as usize))
-    }
-    /// Distance in mm
-    pub fn dist(&self, um: &PositionUM) -> f64 {
-        let r2 = ((self[0] - um[0]).pow(2) + (self[1] - um[1]).pow(2)) as f64;
-        r2.sqrt() / 1000.0
-    }
-    pub fn get_direction(&self, um: &PositionUM) -> [f64; 2] {
-        let mut xy = self
-            .xy
-            .iter()
-            .zip(um.xy.iter())
-            .map(|(xy0, xy1)| (xy1 - xy0) as f64 / 1000.0);
-        [xy.next().unwrap(), xy.next().unwrap()]
-    }
-    pub fn iter(&self) -> impl Iterator<Item = &usize> {
+    pub fn iter(&self) -> impl Iterator<Item = &f64> {
         self.xy.iter()
     }
+    /// Distance in mm
+    pub fn dist(&self, mm: &PositionMM) -> f64 {
+        ((self[0] - mm[0]).powi(2) + (self[1] - mm[1]).powi(2)).sqrt()
+    }
+    pub fn get_direction(&self, mm: &PositionMM) -> [f64; 2] {
+        let dist = self.dist(mm);
+        let mut xy = self
+            .iter()
+            .zip(mm.iter())
+            .map(|(xy0, xy1)| (xy1 - xy0) / dist);
+        [xy.next().unwrap(), xy.next().unwrap()]
+    }
 }
 
-impl Index<usize> for PositionUM {
-    type Output = usize;
+impl Display for PositionMM {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "xy:[{}, {}]", self.xy[0], self.xy[1])
+    }
+}
+
+impl Index<usize> for PositionMM {
+    type Output = f64;
     fn index(&self, index: usize) -> &Self::Output {
         &self.xy[index]
     }
@@ -65,9 +61,13 @@ impl PositionStep {
     }
     pub fn step(&mut self, index: usize, instruction: &StepInstruction) {
         match instruction {
-            StepInstruction::StepUp => {self.rr[index] += 1;}
-            StepInstruction::StepDown => {self.rr[index] -= 1;}
-            StepInstruction::Hold => {},
+            StepInstruction::StepUp => {
+                self.rr[index] += 1;
+            }
+            StepInstruction::StepDown => {
+                self.rr[index] -= 1;
+            }
+            StepInstruction::Hold => {}
         }
     }
 }
@@ -90,71 +90,74 @@ impl PositionStepFloat {
     pub fn iter(&self) -> impl Iterator<Item = &f64> {
         self.rr.iter()
     }
+    fn from_position_step(step: &PositionStep, physical: &Physical) -> Self {
+        let rr = step.rr.map(|r| physical.step_to_mm(&r));
+        Self::new(rr)
+    }
+}
+
+impl Index<usize> for PositionStepFloat {
+    type Output = f64;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.rr[index]
+    }
 }
 
 #[derive(Default, Clone, Copy)]
 pub struct Position {
-    um: PositionUM,
+    mm: PositionMM,
     step: PositionStep,
 }
 
 impl Display for Position {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "um:[{}], step:[{}]", self.um, self.step)
+        write!(f, "mm:[{}], step:[{}]", self.mm, self.step)
     }
 }
 
 impl Position {
-    pub fn new(um: PositionUM, step: PositionStep) -> Self {
-        Position { um, step }
+    pub fn new(mm: PositionMM, step: PositionStep) -> Self {
+        Position { mm, step }
     }
-    // pub fn from_mm(xy: [f32; 2], physical: &Physical) -> Self {
-    //     let um = PositionUM::from_mm(xy);
-    //     Self::from_um(um, physical)
-    // }
     pub fn from_step(step: PositionStep, physical: &Physical) -> Self {
-        let stepf: PositionStepFloat = step.into();
+        let stepf: PositionStepFloat = PositionStepFloat::from_position_step(&step, physical);
         let r_m0 = stepf[0];
         let r_m1 = stepf[1];
         // solved for let motor_pos = [mm([0.0, 368.8]), mm([297.0, 368.8])];
-        let x = 0.00168350168350168 * r_m0.powi(2) - 0.00168350168350168*r_m1.powi(2) + 148.5;
-        let pos_m0: PositionMM = physical.get_motor_position(0).into();
-        let x_m0:f64 = pos_m0[0];
-        let y_m0:f64 = pos_m0[1];
+        let x = 0.00168350168350168 * r_m0.powi(2) - 0.00168350168350168 * r_m1.powi(2) + 148.5;
+        let pos_m0: &PositionMM = physical.get_motor_position(0);
+        let x_m0: f64 = pos_m0[0];
+        let y_m0: f64 = pos_m0[1];
         let y = (r_m0.powi(2) - (x - x_m0).powi(2)).sqrt() + y_m0;
-        let um = PositionUM::from_mm([x, y]);
-        Position::new(um, step)
+        let mm = PositionMM::new([x, y]);
+        Position::new(mm, step)
     }
-    pub fn from_um(um: PositionUM, physical: &Physical) -> Self {
-        let rr = physical.get_motor_dist(&um);
-        Position::new(um, rr)
+    pub fn from_mm(mm: PositionMM, physical: &Physical) -> Self {
+        let rr = physical.get_motor_dist(&mm);
+        Position::new(mm, rr)
     }
     pub fn get_step(&self) -> &PositionStep {
         &self.step
     }
-    /// Distance in mm
-    // pub fn dist(&self, um: &PositionUM) -> f64 {
-    //     self.um.dist(um)
-    // }
     pub fn iter_step(&self) -> impl Iterator<Item = &usize> {
         self.step.iter()
     }
 }
 
-impl PartialEq<PositionUM> for Position {
-    fn eq(&self, other: &PositionUM) -> bool {
-        self.um == *other
+impl PartialEq<PositionMM> for Position {
+    fn eq(&self, other: &PositionMM) -> bool {
+        self.mm[0] == other[0] && self.mm[1] == other[1]
     }
 }
-impl PartialEq<Position> for PositionUM {
+impl PartialEq<Position> for PositionMM {
     fn eq(&self, other: &Position) -> bool {
-        *other == *self
+        other.mm[0] == self[0] && other.mm[1] == self[1]
     }
 }
 
-impl From<Position> for PositionUM {
+impl From<Position> for PositionMM {
     fn from(value: Position) -> Self {
-        value.um
+        value.mm
     }
 }
 

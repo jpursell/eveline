@@ -1,17 +1,34 @@
+use std::fmt::Display;
+
 use crate::{
     motor::STEP_DIVISION,
-    position::{PositionStep, PositionUM},
+    position::{PositionMM, PositionStep},
 };
 
 pub struct Physical {
-    motor_pos: [PositionUM; 2],
+    motor_pos: [PositionMM; 2],
     steps_per_mm: f64,
+    mm_per_steps: f64,
     max_velocity: f32,
+}
+
+impl Display for Physical {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "motor_pos: [{}, {}], steps_per_mm: {}, mm_per_steps: {}, max_velocity: {}",
+            self.motor_pos[0],
+            self.motor_pos[1],
+            self.steps_per_mm,
+            self.mm_per_steps,
+            self.max_velocity
+        )
+    }
 }
 
 impl Physical {
     pub fn new() -> Physical {
-        let mm = PositionUM::from_mm;
+        let mm = PositionMM::new;
         let motor_pos = [mm([0.0, 368.8]), mm([297.0, 368.8])];
         let spool_radius: f64 = 5.75;
         let gear_ratio: f64 = (59.0_f64 / 17.0_f64).powi(2);
@@ -30,22 +47,28 @@ impl Physical {
         Physical {
             motor_pos,
             steps_per_mm,
+            mm_per_steps: 1.0 / steps_per_mm,
             max_velocity,
         }
     }
-    pub fn get_motor_dist(&self, um: &PositionUM) -> PositionStep {
+    pub fn get_motor_dist(&self, mm: &PositionMM) -> PositionStep {
         let mut rr = self.motor_pos.iter().map(|mp| {
-            let r = mp.dist(um);
+            let r = mp.dist(mm);
+            println!("motor_dist: dist from {} to {} is {}", mp, mm, r);
             let step = r * self.steps_per_mm;
             step.round() as usize
         });
         let rr = [rr.next().unwrap(), rr.next().unwrap()];
+        println!("motor dist to {} is [{}, {}]", mm, rr[0], rr[1]);
         PositionStep::new(rr)
     }
-    pub fn get_motor_position(&self, index: usize) -> &PositionUM {
+    pub fn get_motor_position(&self, index: usize) -> &PositionMM {
         &self.motor_pos[index]
     }
     pub fn get_max_velocity(&self) -> f32 {
         self.max_velocity
+    }
+    pub fn step_to_mm(&self, step: &usize) -> f64 {
+        *step as f64 * self.mm_per_steps
     }
 }
