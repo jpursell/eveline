@@ -26,6 +26,15 @@ impl PositionMM {
             .map(|(xy0, xy1)| (xy1 - xy0) / dist);
         [xy.next().unwrap(), xy.next().unwrap()]
     }
+    pub fn offset(&self, amount: &f64, direction: &[f64; 2]) -> PositionMM {
+        let mut xy = self
+            .xy
+            .iter()
+            .zip(direction)
+            .map(|(xy, dir)| xy + dir * amount);
+        let xy = [xy.next().unwrap(), xy.next().unwrap()];
+        PositionMM::new(xy)
+    }
 }
 
 impl Display for PositionMM {
@@ -70,6 +79,9 @@ impl PositionStep {
             StepInstruction::Hold => {}
         }
     }
+    pub fn from_position_step_float(rr: &PositionStepFloat) -> Self {
+        PositionStep::new(rr.rr.map(|r| r.round() as usize))
+    }
 }
 
 impl Index<usize> for PositionStep {
@@ -90,9 +102,12 @@ impl PositionStepFloat {
     pub fn iter(&self) -> impl Iterator<Item = &f64> {
         self.rr.iter()
     }
-    fn from_position_step(step: &PositionStep, physical: &Physical) -> Self {
+    pub fn from_position_step(step: &PositionStep, physical: &Physical) -> Self {
         let rr = step.rr.map(|r| physical.step_to_mm(&r));
         Self::new(rr)
+    }
+    pub fn from_mm(mm: &PositionMM, physical: &Physical) -> Self {
+        physical.get_motor_dist_float(mm)
     }
 }
 
@@ -145,6 +160,9 @@ impl Position {
     pub fn very_close_to(&self, other: &PositionMM, physical: &Physical) -> bool {
         let dist = self.mm.dist(other);
         physical.mm_to_step(&dist) < 2.0
+    }
+    pub fn offset(&self, amount: &f64, direction: &[f64; 2]) -> PositionMM {
+        self.mm.offset(amount, direction)
     }
 }
 

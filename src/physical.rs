@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     motor::STEP_DIVISION,
-    position::{PositionMM, PositionStep},
+    position::{PositionMM, PositionStep, PositionStepFloat},
 };
 
 pub struct Physical {
@@ -54,14 +54,16 @@ impl Physical {
     pub fn mm_to_step(&self, dist: &f64) -> f64 {
         dist * self.steps_per_mm
     }
-    pub fn get_motor_dist(&self, mm: &PositionMM) -> PositionStep {
+    pub fn get_motor_dist_float(&self, mm: &PositionMM) -> PositionStepFloat {
         let mut rr = self.motor_pos.iter().map(|mp| {
             let r = mp.dist(mm);
-            let step = self.mm_to_step(&r);
-            step.round() as usize
+            self.mm_to_step(&r)
         });
         let rr = [rr.next().unwrap(), rr.next().unwrap()];
-        PositionStep::new(rr)
+        PositionStepFloat::new(rr)
+    }
+    pub fn get_motor_dist(&self, mm: &PositionMM) -> PositionStep {
+        PositionStep::from_position_step_float(&self.get_motor_dist_float(mm))
     }
     pub fn get_motor_position(&self, index: usize) -> &PositionMM {
         &self.motor_pos[index]

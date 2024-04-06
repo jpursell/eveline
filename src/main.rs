@@ -6,13 +6,15 @@ mod predictor;
 mod scurve;
 
 use crate::controller::Controller;
+use log::info;
 use simple_signal::{self, Signal};
 use std::error::Error;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    println!("Eveline start");
+    env_logger::init();
+    info!("Eveline start");
     let mut controller = Controller::new();
 
     let running = Arc::new(AtomicBool::new(true));
@@ -29,6 +31,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     while running.load(Ordering::SeqCst) {
         controller.update();
     }
-    println!("Eveline done");
+    info!("Eveline done");
     Ok(())
 }

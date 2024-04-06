@@ -212,26 +212,36 @@ impl SCurve {
         }
     }
     /// Return the desired step of the motors
-    pub fn get_desired(&self, solver: &SCurveSolver) -> PositionStepFloat {
+    pub fn get_desired(&self, solver: &SCurveSolver, physical: &Physical) -> PositionStepFloat {
         let elasped = self.t_start.elapsed().as_secs_f64();
+        // info!("elasped: {elasped}");
         let p = if elasped < self.t[0] {
+            // info!("stage 0");
             self.stage_0(elasped, solver)
         } else if elasped < self.t[1] {
+            // info!("stage 1");
             self.stage_1(elasped, solver)
         } else if elasped < self.t[2] {
+            // info!("stage 2");
             self.stage_2(elasped, solver)
         } else if elasped < self.t[3] {
+            // info!("stage 3");
             self.stage_3(elasped)
         } else if elasped < self.t[4] {
+            // info!("stage 4");
             self.stage_4(elasped, solver)
         } else if elasped < self.t[5] {
+            // info!("stage 5");
             self.stage_5(elasped, solver)
         } else {
+            // info!("stage 6");
             self.stage_6(elasped, solver)
         };
+        // info!("p: {p}");
         let dist = self.dir.iter().map(|d| d * p);
         let mut desired = self.start.iter().zip(dist).map(|(&s, d)| s + d);
-        PositionStepFloat::new([desired.next().unwrap(), desired.next().unwrap()])
+        let desired = PositionMM::new([desired.next().unwrap(), desired.next().unwrap()]);
+        PositionStepFloat::from_mm(&desired, physical)
     }
 
     fn stage_0(&self, elasped: f64, solver: &SCurveSolver) -> f64 {
