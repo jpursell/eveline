@@ -111,7 +111,7 @@ impl Controller {
     /// Initialize move to new location. Set up s-curve and change status.
     fn init_move(&mut self, mm: &PositionMM) {
         println!("init_move");
-        if *mm == self.current_position {
+        if self.current_position.very_close_to(mm, &self.physical) {
             self.move_status = MoveStatus::Stopped;
             return;
         }
@@ -174,7 +174,7 @@ impl Controller {
             }
             ControllerMode::QueryPosition => {
                 if let Ok(_) = self.set_current_position_from_user() {
-                    if self.current_position == self.paper_origin {
+                    if self.current_position.very_close_to(&self.paper_origin, &self.physical) {
                         self.mode = ControllerMode::Complete;
                     } else {
                         self.init_move(&self.paper_origin.clone());

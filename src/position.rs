@@ -128,7 +128,7 @@ impl Position {
         let pos_m0: &PositionMM = physical.get_motor_position(0);
         let x_m0: f64 = pos_m0[0];
         let y_m0: f64 = pos_m0[1];
-        let y = (r_m0.powi(2) - (x - x_m0).powi(2)).sqrt() + y_m0;
+        let y = y_m0 - (r_m0.powi(2) - (x - x_m0).powi(2)).sqrt();
         let mm = PositionMM::new([x, y]);
         Position::new(mm, step)
     }
@@ -142,16 +142,9 @@ impl Position {
     pub fn iter_step(&self) -> impl Iterator<Item = &usize> {
         self.step.iter()
     }
-}
-
-impl PartialEq<PositionMM> for Position {
-    fn eq(&self, other: &PositionMM) -> bool {
-        self.mm[0] == other[0] && self.mm[1] == other[1]
-    }
-}
-impl PartialEq<Position> for PositionMM {
-    fn eq(&self, other: &Position) -> bool {
-        other.mm[0] == self[0] && other.mm[1] == self[1]
+    pub fn very_close_to(&self, other: &PositionMM, physical: &Physical) -> bool {
+        let dist = self.mm.dist(other);
+        physical.mm_to_step(&dist) < 2.0
     }
 }
 

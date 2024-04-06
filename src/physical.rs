@@ -8,7 +8,7 @@ use crate::{
 pub struct Physical {
     motor_pos: [PositionMM; 2],
     steps_per_mm: f64,
-    mm_per_steps: f64,
+    mm_per_step: f64,
     max_velocity: f32,
 }
 
@@ -16,11 +16,11 @@ impl Display for Physical {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "motor_pos: [{}, {}], steps_per_mm: {}, mm_per_steps: {}, max_velocity: {}",
+            "motor_pos: [{}, {}], steps_per_mm: {}, mm_per_step: {}, max_velocity: {}",
             self.motor_pos[0],
             self.motor_pos[1],
             self.steps_per_mm,
-            self.mm_per_steps,
+            self.mm_per_step,
             self.max_velocity
         )
     }
@@ -47,19 +47,20 @@ impl Physical {
         Physical {
             motor_pos,
             steps_per_mm,
-            mm_per_steps: 1.0 / steps_per_mm,
+            mm_per_step: 1.0 / steps_per_mm,
             max_velocity,
         }
+    }
+    pub fn mm_to_step(&self, dist: &f64) -> f64 {
+        dist * self.steps_per_mm
     }
     pub fn get_motor_dist(&self, mm: &PositionMM) -> PositionStep {
         let mut rr = self.motor_pos.iter().map(|mp| {
             let r = mp.dist(mm);
-            println!("motor_dist: dist from {} to {} is {}", mp, mm, r);
-            let step = r * self.steps_per_mm;
+            let step = self.mm_to_step(&r);
             step.round() as usize
         });
         let rr = [rr.next().unwrap(), rr.next().unwrap()];
-        println!("motor dist to {} is [{}, {}]", mm, rr[0], rr[1]);
         PositionStep::new(rr)
     }
     pub fn get_motor_position(&self, index: usize) -> &PositionMM {
@@ -69,6 +70,6 @@ impl Physical {
         self.max_velocity
     }
     pub fn step_to_mm(&self, step: &usize) -> f64 {
-        *step as f64 * self.mm_per_steps
+        *step as f64 * self.mm_per_step
     }
 }
