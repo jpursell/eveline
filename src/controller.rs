@@ -113,12 +113,10 @@ impl Controller {
         Err(())
     }
     fn get_jog_from_user(&mut self) -> Result<PositionMM, ()> {
-        println!(
-            "Where to? provide \"x,y\""
-        );
+        println!("Where to? provide \"x,y\"");
         for _ in 0..1 {
             if let Ok(mm) = Controller::get_position_from_user() {
-                return Ok(mm)
+                return Ok(mm);
             }
         }
         Err(())
@@ -169,10 +167,18 @@ impl Controller {
             let _ = self.set_current_position_from_user();
             return;
         }
-        self.implement_step_instructions([StepInstruction::StepUp; 2]);
-        thread::sleep(Duration::from_secs_f64(0.5));
-        self.implement_step_instructions([StepInstruction::StepDown; 2]);
-        thread::sleep(Duration::from_secs_f64(0.5));
+        println!("move L/H. current {}", self.current_position);
+        for _ in 0..1000 {
+            self.implement_step_instructions([StepInstruction::Hold, StepInstruction::StepShorter]);
+            thread::sleep(Duration::from_secs_f64(0.005));
+        }
+        thread::sleep(Duration::from_secs_f64(1.0));
+        println!("move S/H. current {}", self.current_position);
+        for _ in 0..1000 {
+            self.implement_step_instructions([StepInstruction::Hold, StepInstruction::StepLonger]);
+            thread::sleep(Duration::from_secs_f64(0.005));
+        }
+        thread::sleep(Duration::from_secs_f64(2.0));
     }
     fn small_move(&mut self) {
         if !self.current_position_initialized {
@@ -198,7 +204,10 @@ impl Controller {
         // return;
         let direction = [0.0, -1.0];
         let new_position: PositionMM = self.current_position.offset(&amount, &direction);
-        info!("move back to {} from {}", new_position, self.current_position);
+        info!(
+            "move back to {} from {}",
+            new_position, self.current_position
+        );
         self.init_move(&new_position);
         loop {
             match self.move_status {

@@ -43,10 +43,10 @@ impl Predictor {
         let instructions = remainders.map(|r| {
             if r > 1.0 {
                 move_now = true;
-                StepInstruction::StepUp
+                StepInstruction::StepLonger
             } else if r < -1.0 {
                 move_now = true;
-                StepInstruction::StepDown
+                StepInstruction::StepShorter
             } else {
                 StepInstruction::Hold
             }

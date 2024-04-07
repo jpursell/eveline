@@ -10,8 +10,8 @@ pub const STEP_DIVISION: usize = 1;
 
 #[derive(Clone, Copy)]
 pub enum StepInstruction {
-    StepUp,
-    StepDown,
+    StepLonger,
+    StepShorter,
     Hold,
 }
 
@@ -77,27 +77,27 @@ impl Motor {
             current_on,
         }
     }
-    fn step_down(&mut self) {
+    fn step_shorter(&mut self) {
         match self.side {
-            Side::Left => self.step_clock_wise(),
-            Side::Right => self.step_counter_clock_wise(),
+            Side::Left => self.step_counter_clock_wise(),
+            Side::Right => self.step_clock_wise(),
         };
         self.position -= 1;
     }
-    fn step_up(&mut self) {
+    fn step_longer(&mut self) {
         match self.side {
-            Side::Right => self.step_clock_wise(),
-            Side::Left => self.step_counter_clock_wise(),
+            Side::Left => self.step_clock_wise(),
+            Side::Right => self.step_counter_clock_wise(),
         };
         self.position += 1;
     }
     pub fn step(&mut self, instruction: &StepInstruction) {
         match instruction {
-            StepInstruction::StepUp => {
-                self.step_up();
+            StepInstruction::StepLonger => {
+                self.step_longer();
             }
-            StepInstruction::StepDown => {
-                self.step_down();
+            StepInstruction::StepShorter => {
+                self.step_shorter();
             }
             StepInstruction::Hold => {}
         }

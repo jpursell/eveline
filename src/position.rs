@@ -70,10 +70,10 @@ impl PositionStep {
     }
     pub fn step(&mut self, index: usize, instruction: &StepInstruction) {
         match instruction {
-            StepInstruction::StepUp => {
+            StepInstruction::StepLonger => {
                 self.rr[index] += 1;
             }
-            StepInstruction::StepDown => {
+            StepInstruction::StepShorter => {
                 self.rr[index] -= 1;
             }
             StepInstruction::Hold => {}
