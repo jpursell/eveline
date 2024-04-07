@@ -37,6 +37,7 @@ pub struct Controller {
     s_curve: SCurve,
     solver: SCurveSolver,
     predictor: Predictor,
+    wait_count: usize,
 }
 
 impl Controller {
@@ -59,6 +60,7 @@ impl Controller {
             move_status: MoveStatus::Stopped,
             s_curve: SCurve::default(),
             predictor: Predictor::default(),
+            wait_count: 0,
         }
     }
     fn get_position_from_user() -> Result<PositionMM, ()> {
@@ -133,6 +135,7 @@ impl Controller {
         info!("s-curve {}", self.s_curve);
         self.predictor = Predictor::new();
         self.move_status = MoveStatus::Moving;
+        self.wait_count = 0;
     }
     /// Move current position in steps to (x, y)
     fn update_move(&mut self) {
@@ -142,10 +145,13 @@ impl Controller {
         }
         let desired = self.s_curve.get_desired(&self.solver, &self.physical);
         match self.predictor.predict(&self.current_position, &desired) {
-            Prediction::Wait(duration) => {
-                thread::sleep(duration);
+            Prediction::Wait(_duration) => {
+                self.wait_count += 1;
+                // thread::sleep(duration);
             }
             Prediction::MoveMotors(instructions) => {
+                // print!("{},", self.wait_count);
+                self.wait_count = 0;
                 self.implement_step_instructions(instructions);
             }
         }
