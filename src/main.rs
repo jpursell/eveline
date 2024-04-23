@@ -1,4 +1,5 @@
 mod controller;
+mod draw;
 mod motor;
 mod physical;
 mod position;

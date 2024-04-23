@@ -3,6 +3,7 @@ use std::{io, thread, time::Duration};
 use log::info;
 
 use crate::{
+    draw::square,
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -11,6 +12,7 @@ use crate::{
 };
 
 enum ControllerMode {
+    Ask,
     Step,
     SmallMove,
     MoveTo,
@@ -18,6 +20,7 @@ enum ControllerMode {
     QueryPosition,
     Moving,
     Complete,
+    Square,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -63,6 +66,22 @@ impl Controller {
             wait_count: 0,
         }
     }
+    fn get_square_size_from_user() -> Result<f64, ()> {
+        println!("Square side length?");
+        let mut input = String::new();
+        if let Err(error) = io::stdin().read_line(&mut input) {
+            log::error!("error: {error}");
+            return Err(());
+        }
+
+        let input = input.trim();
+        let side = input.parse::<f64>();
+        if side.is_err() {
+            log::error!("Could not parse");
+            return Err(());
+        }
+        Ok(side.unwrap())
+    }
     fn get_position_from_user() -> Result<PositionMM, ()> {
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
@@ -89,6 +108,34 @@ impl Controller {
             xy_f
         };
         Ok(PositionMM::new(xy))
+    }
+    fn set_mode_from_user(&mut self) {
+        println!("What should we do? (M)ove, (S)quare");
+        let mut input = String::new();
+        if let Err(error) = io::stdin().read_line(&mut input) {
+            log::error!("error: {error}");
+            return;
+        }
+
+        let input = input.trim();
+        let first_char = input.chars().next();
+        if first_char.is_none() {
+            println!("Nothing entered");
+            return;
+        }
+        let first_char = first_char.unwrap().to_lowercase().next();
+        if first_char.is_none() {
+            println!("Could not convert to lowercase");
+            return;
+        }
+        self.mode = match first_char.unwrap() {
+            'm' => ControllerMode::MoveTo,
+            's' => ControllerMode::Square,
+            _ => {
+                println!("Unknown mode.");
+                ControllerMode::Ask
+            }
+        };
     }
     fn set_current_position_from_user(&mut self) -> Result<(), ()> {
         println!("What's the current position in mm? provide \"x,y\"");
@@ -251,6 +298,9 @@ impl Controller {
     }
     pub fn update(&mut self) {
         match self.mode {
+            ControllerMode::Ask => {
+                self.set_mode_from_user();
+            }
             ControllerMode::Step => {
                 self.step();
             }
@@ -270,15 +320,7 @@ impl Controller {
             }
             ControllerMode::QueryPosition => {
                 if let Ok(_) = self.set_current_position_from_user() {
-                    if self
-                        .current_position
-                        .very_close_to(&self.paper_origin, &self.physical)
-                    {
-                        self.mode = ControllerMode::Complete;
-                    } else {
-                        self.init_move(&self.paper_origin.clone());
-                        self.mode = ControllerMode::Moving;
-                    }
+                    self.mode = ControllerMode::Ask;
                 }
             }
             ControllerMode::Moving => {
@@ -286,6 +328,29 @@ impl Controller {
                 if self.move_status == MoveStatus::Stopped {
                     self.mode = ControllerMode::QueryPosition;
                 }
+            }
+            ControllerMode::Square => {
+                let square_side_length = Controller::get_square_size_from_user();
+                if square_side_length.is_err() {
+                    self.mode = ControllerMode::Ask;
+                    return;
+                }
+
+                let coords = square(&self.current_position.into(), square_side_length.unwrap());
+                for new_position in coords {
+                    self.init_move(new_position);
+                    loop {
+                        match self.move_status {
+                            MoveStatus::Stopped => {
+                                break;
+                            }
+                            MoveStatus::Moving => {
+                                self.update_move();
+                            }
+                        }
+                    }
+                }
+                self.mode = ControllerMode::Ask;
             }
         }
     }
