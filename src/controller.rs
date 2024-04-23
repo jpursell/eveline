@@ -56,7 +56,7 @@ impl Controller {
             current_position: Position::default(),
             current_position_initialized: false,
             motors,
-            mode: ControllerMode::MoveTo,
+            mode: ControllerMode::QueryPosition,
             paper_origin: PositionMM::default(),
             solver,
             physical,
@@ -309,6 +309,7 @@ impl Controller {
             }
             ControllerMode::MoveTo => {
                 self.move_to();
+                self.mode = ControllerMode::Ask;
             }
             ControllerMode::Complete => {
                 todo!()
@@ -336,8 +337,8 @@ impl Controller {
                     return;
                 }
 
-                let coords = square(&self.current_position.into(), square_side_length.unwrap());
-                for new_position in coords {
+                let coords = square(&self.current_position.into(), &square_side_length.unwrap());
+                for new_position in &coords {
                     self.init_move(new_position);
                     loop {
                         match self.move_status {
