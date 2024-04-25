@@ -1,5 +1,7 @@
 use std::{fmt::Display, ops::Index};
 
+use nalgebra::Point2;
+
 use crate::{motor::StepInstruction, physical::Physical};
 
 #[derive(Default, Copy, Clone)]
@@ -47,6 +49,12 @@ impl Index<usize> for PositionMM {
     type Output = f64;
     fn index(&self, index: usize) -> &Self::Output {
         &self.xy[index]
+    }
+}
+
+impl From<PositionMM> for Point2<f64> {
+    fn from(value: PositionMM) -> Self {
+        Point2::new(value.xy[0], value.xy[1])
     }
 }
 
