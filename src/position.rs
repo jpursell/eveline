@@ -58,6 +58,12 @@ impl From<PositionMM> for Point2<f64> {
     }
 }
 
+impl From<Point2<f64>> for PositionMM {
+    fn from(value: Point2<f64>) -> Self {
+        PositionMM::new([value.x, value.y])
+    }
+}
+
 #[derive(Default, Clone, Copy)]
 pub struct PositionStep {
     rr: [usize; 2],
