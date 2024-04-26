@@ -7,6 +7,9 @@ use crate::{
 
 pub struct Physical {
     motor_pos: [PositionMM; 2],
+    x_limits: [f64; 2],
+    y_limits: [f64; 2],
+    y_offset: f64,
     steps_per_mm: f64,
     mm_per_step: f64,
     max_velocity: f32,
@@ -44,12 +47,22 @@ impl Physical {
         let max_steps_per_second = max_revs_per_second * motor_steps_per_revolution as f32;
         // max velocity is about 5 mm/s
         let max_velocity = max_steps_per_second / steps_per_mm as f32;
+        let x_limits = [45.0, 260.0];
+        let y_limits = [50.0, 328.0];
+        let y_offset = -15.0;
         Physical {
             motor_pos,
             steps_per_mm,
             mm_per_step: 1.0 / steps_per_mm,
             max_velocity,
+            x_limits,
+            y_limits,
+            y_offset,
         }
+    }
+    pub fn in_bounds(&self, position:&PositionMM) -> bool {
+        let y_limits = self.y_limits.map(|x| x + self.y_offset);
+        position.in_imits(&self.x_limits, &y_limits)
     }
     pub fn mm_to_step(&self, dist: &f64) -> f64 {
         dist * self.steps_per_mm

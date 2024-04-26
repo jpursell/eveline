@@ -4,9 +4,15 @@ use nalgebra::Point2;
 
 use crate::{motor::StepInstruction, physical::Physical};
 
-#[derive(Default, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct PositionMM {
     xy: [f64; 2],
+}
+
+impl Default for PositionMM {
+    fn default() -> Self {
+        PositionMM::new([0.0, 0.0])
+    }
 }
 
 impl PositionMM {
@@ -36,6 +42,15 @@ impl PositionMM {
             .map(|(xy, dir)| xy + dir * amount);
         let xy = [xy.next().unwrap(), xy.next().unwrap()];
         PositionMM::new(xy)
+    }
+    pub fn in_imits(&self, x_limits: &[f64;2], y_limits: &[f64;2]) -> bool {
+        if self.xy[0] < x_limits[0] || self.xy[0] > x_limits[1] {
+            return false;
+        }
+        if self.xy[1] < y_limits[1] || self.xy[1] > y_limits[1] {
+            return false;
+        }
+        true
     }
 }
 

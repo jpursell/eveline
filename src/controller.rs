@@ -3,7 +3,7 @@ use std::{io, thread, time::Duration};
 use log::info;
 
 use crate::{
-    draw::square,
+    draw::{square, star, Pattern},
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -21,6 +21,7 @@ enum ControllerMode {
     Moving,
     Complete,
     Square,
+    Star,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -66,8 +67,7 @@ impl Controller {
             wait_count: 0,
         }
     }
-    fn get_square_size_from_user() -> Result<f64, ()> {
-        println!("Square side length?");
+    fn get_scalar_from_user() -> Result<f64, ()> {
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             log::error!("error: {error}");
@@ -110,7 +110,7 @@ impl Controller {
         Ok(PositionMM::new(xy))
     }
     fn set_mode_from_user(&mut self) {
-        println!("What should we do? (M)ove, (S)quare");
+        println!("What should we do? (M)ove, (S)quare, s(T)ar");
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             log::error!("error: {error}");
@@ -131,6 +131,7 @@ impl Controller {
         self.mode = match first_char.unwrap() {
             'm' => ControllerMode::MoveTo,
             's' => ControllerMode::Square,
+            't' => ControllerMode::Star,
             _ => {
                 println!("Unknown mode.");
                 ControllerMode::Ask
@@ -296,6 +297,58 @@ impl Controller {
             }
         }
     }
+
+    fn create_square_pattern(&self)->Result<Vec<PositionMM>,()>{
+        println!("How long should square sides be?");
+        let square_side_length = Controller::get_scalar_from_user();
+        if square_side_length.is_err() {
+            return Err(());
+        }
+        let coords = square(&self.current_position.into(), &square_side_length.unwrap());
+        Ok(coords)
+    }
+
+    fn create_star_pattern(&self)->Result<Vec<PositionMM>,()>{
+        println!("How long should star lines be?");
+        let size = Controller::get_scalar_from_user();
+        if size.is_err() {
+            return Err(());
+        }
+        let coords = star(&self.current_position.into(), &size.unwrap());
+        Ok(coords)
+    }
+
+    fn draw_pattern(&mut self, pattern: Pattern) {
+        let pattern = match pattern {
+            Pattern::Square => self.create_square_pattern(),
+            Pattern::Star => self.create_star_pattern(),
+        };
+        if pattern.is_err(){
+            return;
+        }
+        let pattern = pattern.unwrap();
+        for new_position in &pattern {
+            if !self.physical.in_bounds(new_position) {
+                println!("Point outside of bounds");
+                return;
+            }
+        }
+
+        for new_position in &pattern {
+            self.init_move(new_position);
+            loop {
+                match self.move_status {
+                    MoveStatus::Stopped => {
+                        break;
+                    }
+                    MoveStatus::Moving => {
+                        self.update_move();
+                    }
+                }
+            }
+        }
+    }
+
     pub fn update(&mut self) {
         match self.mode {
             ControllerMode::Ask => {
@@ -331,26 +384,11 @@ impl Controller {
                 }
             }
             ControllerMode::Square => {
-                let square_side_length = Controller::get_square_size_from_user();
-                if square_side_length.is_err() {
-                    self.mode = ControllerMode::Ask;
-                    return;
-                }
-
-                let coords = square(&self.current_position.into(), &square_side_length.unwrap());
-                for new_position in &coords {
-                    self.init_move(new_position);
-                    loop {
-                        match self.move_status {
-                            MoveStatus::Stopped => {
-                                break;
-                            }
-                            MoveStatus::Moving => {
-                                self.update_move();
-                            }
-                        }
-                    }
-                }
+                self.draw_pattern(Pattern::Square);
+                self.mode = ControllerMode::Ask;
+            }
+            ControllerMode::Star => {
+                self.draw_pattern(Pattern::Star);
                 self.mode = ControllerMode::Ask;
             }
         }

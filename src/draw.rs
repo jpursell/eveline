@@ -2,6 +2,11 @@ use nalgebra::{Point2, Rotation2, Vector2};
 
 use crate::position::PositionMM;
 
+pub enum Pattern {
+    Square,
+    Star,
+}
+
 pub fn square(position: &PositionMM, side_length: &f64) -> Vec<PositionMM> {
     vec![
         position.offset(side_length, &[0.0, 1.0]),
