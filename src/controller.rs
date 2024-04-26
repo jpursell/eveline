@@ -49,8 +49,8 @@ impl Controller {
         let motors = [Side::Left, Side::Right].map(|s| Motor::new(s));
         let physical = Physical::new();
         info!("Physical: {physical}");
-        let max_acceleration = 1.0;
-        let max_jerk = 1.0;
+        let max_acceleration = 1e4;
+        let max_jerk = 1e9;
         let solver = SCurveSolver::new(&physical, max_acceleration, max_jerk);
         info!("solver: {solver}");
         Controller {
@@ -329,7 +329,7 @@ impl Controller {
         let pattern = pattern.unwrap();
         for new_position in &pattern {
             if !self.physical.in_bounds(new_position) {
-                println!("Point outside of bounds");
+                println!("Point outside of bounds: {new_position}");
                 return;
             }
         }

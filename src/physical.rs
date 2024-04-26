@@ -62,7 +62,7 @@ impl Physical {
     }
     pub fn in_bounds(&self, position:&PositionMM) -> bool {
         let y_limits = self.y_limits.map(|x| x + self.y_offset);
-        position.in_imits(&self.x_limits, &y_limits)
+        position.in_bounds(&self.x_limits, &y_limits)
     }
     pub fn mm_to_step(&self, dist: &f64) -> f64 {
         dist * self.steps_per_mm
