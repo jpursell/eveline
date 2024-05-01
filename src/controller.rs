@@ -110,7 +110,7 @@ impl Controller {
         Ok(PositionMM::new(xy))
     }
     fn set_mode_from_user(&mut self) {
-        println!("What should we do? (M)ove, (S)quare, s(T)ar");
+        println!("What should we do? (M)ove, (S)quare, s(T)ar, set (P)osition");
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             log::error!("error: {error}");
@@ -132,6 +132,7 @@ impl Controller {
             'm' => ControllerMode::MoveTo,
             's' => ControllerMode::Square,
             't' => ControllerMode::Star,
+            'p' => ControllerMode::QueryPosition,
             _ => {
                 println!("Unknown mode.");
                 ControllerMode::Ask
@@ -173,7 +174,6 @@ impl Controller {
     }
     /// Initialize move to new location. Set up s-curve and change status.
     fn init_move(&mut self, mm: &PositionMM) {
-        info!("init_move");
         if self.current_position.very_close_to(mm, &self.physical) {
             self.move_status = MoveStatus::Stopped;
             return;
@@ -189,6 +189,7 @@ impl Controller {
     fn update_move(&mut self) {
         self.move_status = self.s_curve.get_move_status();
         if self.move_status == MoveStatus::Stopped {
+            info!("new position: {}", self.current_position);
             return;
         }
         let desired = self.s_curve.get_desired(&self.solver, &self.physical);
