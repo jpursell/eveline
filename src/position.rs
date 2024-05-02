@@ -52,6 +52,12 @@ impl PositionMM {
         }
         true
     }
+    pub fn x(&self) -> &f64 {
+        &self.xy[0]
+    }
+    pub fn y(&self) -> &f64 {
+        &self.xy[1]
+    }
 }
 
 impl Display for PositionMM {

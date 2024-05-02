@@ -5,6 +5,7 @@ use crate::position::PositionMM;
 pub enum Pattern {
     Square,
     Star,
+    Wave,
 }
 
 pub fn square(position: &PositionMM, side_length: &f64) -> Vec<PositionMM> {
@@ -18,9 +19,9 @@ pub fn square(position: &PositionMM, side_length: &f64) -> Vec<PositionMM> {
 
 pub fn star(position: &PositionMM, side_length: &f64) -> Vec<PositionMM> {
     let n = 13;
-    let mut p:Point2<f64> = (*position).into();
+    let mut p: Point2<f64> = (*position).into();
     let r = side_length;
-    let mut hist:Vec<PositionMM> = Vec::new();
+    let mut hist: Vec<PositionMM> = Vec::new();
     let mut d = Vector2::<f64>::new(-1.0, -1.0);
     let ang: f64 = 180.0_f64 - 180.0_f64 / n as f64;
     let rot_mat = Rotation2::new(ang.to_radians());
@@ -37,4 +38,22 @@ pub fn star(position: &PositionMM, side_length: &f64) -> Vec<PositionMM> {
         hist.push(hist[ptr]);
     }
     hist
+}
+
+pub fn wave(
+    position: &PositionMM,
+    spacing: &f64,
+    length: &f64,
+    amplitude: &f64,
+    period: &f64,
+) -> Vec<PositionMM> {
+    let n = (length / spacing) as usize;
+    let mut pts = Vec::new();
+    let y_scale = 2.0 * std::f64::consts::PI / period;
+    for i in 0..n {
+        let x = i as f64 * spacing;
+        let y = (x * y_scale).sin() * amplitude / 2.0;
+        pts.push(PositionMM::new([x + position.x(), y + position.y()]));
+    }
+    pts
 }

@@ -3,7 +3,7 @@ use std::{io, thread, time::Duration};
 use log::info;
 
 use crate::{
-    draw::{square, star, Pattern},
+    draw::{square, star, wave, Pattern},
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -22,6 +22,7 @@ enum ControllerMode {
     Complete,
     Square,
     Star,
+    Wave,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -110,7 +111,7 @@ impl Controller {
         Ok(PositionMM::new(xy))
     }
     fn set_mode_from_user(&mut self) {
-        println!("What should we do? (M)ove, (S)quare, s(T)ar, set (P)osition");
+        println!("What should we do? (M)ove, (S)quare, s(T)ar, (W)ave, set (P)osition");
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             log::error!("error: {error}");
@@ -132,6 +133,7 @@ impl Controller {
             'm' => ControllerMode::MoveTo,
             's' => ControllerMode::Square,
             't' => ControllerMode::Star,
+            'w' => ControllerMode::Wave,
             'p' => ControllerMode::QueryPosition,
             _ => {
                 println!("Unknown mode.");
@@ -299,7 +301,7 @@ impl Controller {
         }
     }
 
-    fn create_square_pattern(&self)->Result<Vec<PositionMM>,()>{
+    fn create_square_pattern(&self) -> Result<Vec<PositionMM>, ()> {
         println!("How long should square sides be?");
         let square_side_length = Controller::get_scalar_from_user();
         if square_side_length.is_err() {
@@ -309,7 +311,7 @@ impl Controller {
         Ok(coords)
     }
 
-    fn create_star_pattern(&self)->Result<Vec<PositionMM>,()>{
+    fn create_star_pattern(&self) -> Result<Vec<PositionMM>, ()> {
         println!("How long should star lines be?");
         let size = Controller::get_scalar_from_user();
         if size.is_err() {
@@ -319,12 +321,44 @@ impl Controller {
         Ok(coords)
     }
 
+    fn create_wave_pattern(&self) -> Result<Vec<PositionMM>, ()> {
+        println!("Spacing?");
+        let spacing = Controller::get_scalar_from_user();
+        if spacing.is_err() {
+            return Err(());
+        }
+        println!("Length?");
+        let length = Controller::get_scalar_from_user();
+        if length.is_err() {
+            return Err(());
+        }
+        println!("Amplitude?");
+        let amplitude = Controller::get_scalar_from_user();
+        if amplitude.is_err() {
+            return Err(());
+        }
+        println!("Period?");
+        let period = Controller::get_scalar_from_user();
+        if period.is_err() {
+            return Err(());
+        }
+        let coords = wave(
+            &self.current_position.into(),
+            &spacing.unwrap(),
+            &length.unwrap(),
+            &amplitude.unwrap(),
+            &period.unwrap(),
+        );
+        Ok(coords)
+    }
+
     fn draw_pattern(&mut self, pattern: Pattern) {
         let pattern = match pattern {
             Pattern::Square => self.create_square_pattern(),
             Pattern::Star => self.create_star_pattern(),
+            Pattern::Wave => self.create_wave_pattern(),
         };
-        if pattern.is_err(){
+        if pattern.is_err() {
             return;
         }
         let pattern = pattern.unwrap();
@@ -390,6 +424,10 @@ impl Controller {
             }
             ControllerMode::Star => {
                 self.draw_pattern(Pattern::Star);
+                self.mode = ControllerMode::Ask;
+            }
+            ControllerMode::Wave => {
+                self.draw_pattern(Pattern::Wave);
                 self.mode = ControllerMode::Ask;
             }
         }
