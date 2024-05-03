@@ -3,7 +3,7 @@ use std::{io, thread, time::Duration};
 use log::info;
 
 use crate::{
-    draw::{square, star, wave, Pattern},
+    draw::{square, star, spiralgraph, wave, Pattern},
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -20,6 +20,7 @@ enum ControllerMode {
     QueryPosition,
     Moving,
     Complete,
+    Spiralgraph,
     Square,
     Star,
     Wave,
@@ -111,7 +112,7 @@ impl Controller {
         Ok(PositionMM::new(xy))
     }
     fn set_mode_from_user(&mut self) {
-        println!("What should we do? (M)ove, (S)quare, s(T)ar, (W)ave, set (P)osition");
+        println!("What should we do? (M)ove, (S)quare, s(T)ar, (W)ave, spiral(G)raph, set (P)osition");
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             log::error!("error: {error}");
@@ -134,6 +135,7 @@ impl Controller {
             's' => ControllerMode::Square,
             't' => ControllerMode::Star,
             'w' => ControllerMode::Wave,
+            'g' => ControllerMode::Spiralgraph,
             'p' => ControllerMode::QueryPosition,
             _ => {
                 println!("Unknown mode.");
@@ -352,11 +354,25 @@ impl Controller {
         Ok(coords)
     }
 
+    fn create_spiralgraph_pattern(&self) -> Result<Vec<PositionMM>, ()> {
+        println!("Radius?");
+        let radius = Controller::get_scalar_from_user();
+        if radius.is_err() {
+            return Err(());
+        }
+        let coords = spiralgraph(
+            &self.current_position.into(),
+            &radius.unwrap(),
+        );
+        Ok(coords)
+    }
+
     fn draw_pattern(&mut self, pattern: Pattern) {
         let pattern = match pattern {
             Pattern::Square => self.create_square_pattern(),
             Pattern::Star => self.create_star_pattern(),
             Pattern::Wave => self.create_wave_pattern(),
+            Pattern::Spiralgraph => self.create_spiralgraph_pattern(),
         };
         if pattern.is_err() {
             return;
@@ -428,6 +444,10 @@ impl Controller {
             }
             ControllerMode::Wave => {
                 self.draw_pattern(Pattern::Wave);
+                self.mode = ControllerMode::Ask;
+            }
+            ControllerMode::Spiralgraph => {
+                self.draw_pattern(Pattern::Spiralgraph);
                 self.mode = ControllerMode::Ask;
             }
         }

@@ -6,6 +6,7 @@ pub enum Pattern {
     Square,
     Star,
     Wave,
+    Spiralgraph,
 }
 
 pub fn square(position: &PositionMM, side_length: &f64) -> Vec<PositionMM> {
@@ -53,6 +54,25 @@ pub fn wave(
     for i in 0..n {
         let x = i as f64 * spacing;
         let y = (x * y_scale).sin() * amplitude / 2.0;
+        pts.push(PositionMM::new([x + position.x(), y + position.y()]));
+    }
+    pts
+}
+
+pub fn spiralgraph(
+    position: &PositionMM,
+    radius: &f64,
+) -> Vec<PositionMM> {
+    let n = 1800;
+    let dr = 1.0_f64.to_radians();
+    let a = -18.0;
+
+    let mut pts = Vec::new();
+    for i in 0..n {
+        let t = i as f64 * dr;
+        let r = radius * (a / 5.0 * t).sin();
+        let x = r * t.cos();
+        let y = r * t.sin();
         pts.push(PositionMM::new([x + position.x(), y + position.y()]));
     }
     pts
