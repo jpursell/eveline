@@ -1,4 +1,5 @@
 use nalgebra::{Point2, Rotation2, Vector2};
+use ndarray::prelude::*;
 
 use crate::position::PositionMM;
 
@@ -7,6 +8,7 @@ pub enum Pattern {
     Star,
     Wave,
     Spiralgraph,
+    HeartWave,
 }
 
 pub fn square(position: &PositionMM, side_length: &f64) -> Vec<PositionMM> {
@@ -59,10 +61,7 @@ pub fn wave(
     pts
 }
 
-pub fn spiralgraph(
-    position: &PositionMM,
-    radius: &f64,
-) -> Vec<PositionMM> {
+pub fn spiralgraph(position: &PositionMM, radius: &f64) -> Vec<PositionMM> {
     let n = 1800;
     let dr = 1.0_f64.to_radians();
     let a = -18.0;
@@ -76,4 +75,31 @@ pub fn spiralgraph(
         pts.push(PositionMM::new([x + position.x(), y + position.y()]));
     }
     pts
+}
+
+pub fn heart_wave(position: &PositionMM, size: &f64) -> Vec<PositionMM> {
+    let a = 20.0;
+    let mut x_arr: Array1::<f64> = Array::linspace(-2.0, 2.0, 500);
+    let mut y_arr: Array1::<f64> = x_arr.mapv(|x| {
+        x.abs().powf(2.0 / 3.0)
+            + 0.9 * (3.3 - x.powi(2)).powf(0.5) * (a * std::f64::consts::PI * x).sin()
+    });
+
+    x_arr.mapv_inplace(|x| x * size / 2.0);
+    y_arr.mapv_inplace(|y| y * size / 2.0);
+
+    let mut pts = Vec::new();
+    azip!((&x in &x_arr, &y in &y_arr){
+        if !y.is_nan() {
+            pts.push(PositionMM::new([x, y]));
+        }
+    });
+
+    let mut pts2 = Vec::new();
+    for pt in &pts {
+        let x = pt.x() - pts[0].x() + position.x();
+        let y = pt.y() - pts[0].y() + position.y();
+        pts2.push(PositionMM::new([x, y]));
+    }
+    pts2
 }

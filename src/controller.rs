@@ -3,7 +3,7 @@ use std::{io, thread, time::Duration};
 use log::info;
 
 use crate::{
-    draw::{square, star, spiralgraph, wave, Pattern},
+    draw::{square, star, spiralgraph, heart_wave, wave, Pattern},
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -21,6 +21,7 @@ enum ControllerMode {
     Moving,
     Complete,
     Spiralgraph,
+    HeartWave,
     Square,
     Star,
     Wave,
@@ -112,7 +113,7 @@ impl Controller {
         Ok(PositionMM::new(xy))
     }
     fn set_mode_from_user(&mut self) {
-        println!("What should we do? (M)ove, (S)quare, s(T)ar, (W)ave, spiral(G)raph, set (P)osition");
+        println!("What should we do? (M)ove, (S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave set (P)osition");
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             log::error!("error: {error}");
@@ -135,6 +136,7 @@ impl Controller {
             's' => ControllerMode::Square,
             't' => ControllerMode::Star,
             'w' => ControllerMode::Wave,
+            'h' => ControllerMode::HeartWave,
             'g' => ControllerMode::Spiralgraph,
             'p' => ControllerMode::QueryPosition,
             _ => {
@@ -367,12 +369,26 @@ impl Controller {
         Ok(coords)
     }
 
+    fn create_heartwave_pattern(&self) -> Result<Vec<PositionMM>, ()> {
+        println!("Size?");
+        let size = Controller::get_scalar_from_user();
+        if size.is_err() {
+            return Err(());
+        }
+        let coords = heart_wave(
+            &self.current_position.into(),
+            &size.unwrap(),
+        );
+        Ok(coords)
+    }
+
     fn draw_pattern(&mut self, pattern: Pattern) {
         let pattern = match pattern {
             Pattern::Square => self.create_square_pattern(),
             Pattern::Star => self.create_star_pattern(),
             Pattern::Wave => self.create_wave_pattern(),
             Pattern::Spiralgraph => self.create_spiralgraph_pattern(),
+            Pattern::HeartWave => self.create_heartwave_pattern(),
         };
         if pattern.is_err() {
             return;
@@ -448,6 +464,10 @@ impl Controller {
             }
             ControllerMode::Spiralgraph => {
                 self.draw_pattern(Pattern::Spiralgraph);
+                self.mode = ControllerMode::Ask;
+            }
+            ControllerMode::HeartWave => {
+                self.draw_pattern(Pattern::HeartWave);
                 self.mode = ControllerMode::Ask;
             }
         }
