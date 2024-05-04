@@ -85,9 +85,6 @@ pub fn heart_wave(position: &PositionMM, size: &f64) -> Vec<PositionMM> {
             + 0.9 * (3.3 - x.powi(2)).powf(0.5) * (a * std::f64::consts::PI * x).sin()
     });
 
-    x_arr.mapv_inplace(|x| x * size / 2.0);
-    y_arr.mapv_inplace(|y| y * size / 2.0);
-
     let mut pts = Vec::new();
     azip!((&x in &x_arr, &y in &y_arr){
         if !y.is_nan() {
@@ -95,10 +92,13 @@ pub fn heart_wave(position: &PositionMM, size: &f64) -> Vec<PositionMM> {
         }
     });
 
+    let cur_size = pts[pts.len()-1].x() - pts[0].x();
+    let scale = size / cur_size;
+
     let mut pts2 = Vec::new();
     for pt in &pts {
-        let x = pt.x() - pts[0].x() + position.x();
-        let y = pt.y() - pts[0].y() + position.y();
+        let x = (pt.x() - pts[0].x() + position.x()) * scale;
+        let y = (pt.y() - pts[0].y() + position.y()) * scale;
         pts2.push(PositionMM::new([x, y]));
     }
     pts2
