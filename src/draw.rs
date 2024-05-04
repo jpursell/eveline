@@ -97,8 +97,8 @@ pub fn heart_wave(position: &PositionMM, size: &f64) -> Vec<PositionMM> {
 
     let mut pts2 = Vec::new();
     for pt in &pts {
-        let x = (pt.x() - pts[0].x() + position.x()) * scale;
-        let y = (pt.y() - pts[0].y() + position.y()) * scale;
+        let x = (pt.x() - pts[0].x()) * scale + position.x();
+        let y = (pt.y() - pts[0].y()) * scale +  position.y();
         pts2.push(PositionMM::new([x, y]));
     }
     pts2
