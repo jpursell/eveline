@@ -43,7 +43,7 @@ impl PositionMM {
         let xy = [xy.next().unwrap(), xy.next().unwrap()];
         PositionMM::new(xy)
     }
-    pub fn in_bounds(&self, x_limits: &[f64;2], y_limits: &[f64;2]) -> bool {
+    pub fn in_bounds(&self, x_limits: &[f64; 2], y_limits: &[f64; 2]) -> bool {
         if self.xy[0] < x_limits[0] || self.xy[0] > x_limits[1] {
             return false;
         }

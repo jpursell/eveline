@@ -60,7 +60,7 @@ impl Physical {
             y_offset,
         }
     }
-    pub fn in_bounds(&self, position:&PositionMM) -> bool {
+    pub fn in_bounds(&self, position: &PositionMM) -> bool {
         let y_limits = self.y_limits.map(|x| x + self.y_offset);
         position.in_bounds(&self.x_limits, &y_limits)
     }

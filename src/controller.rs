@@ -1,9 +1,10 @@
-use std::{io, thread, time::Duration};
+use std::{io, path::PathBuf, thread, time::Duration};
 
 use log::info;
 
 use crate::{
-    draw::{square, star, spiralgraph, heart_wave, wave, Pattern},
+    draw::{heart_wave, spiralgraph, square, star, wave, Pattern},
+    gcode::GCodeFile,
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -20,6 +21,7 @@ enum ControllerMode {
     QueryPosition,
     Moving,
     Complete,
+    RunGCode,
     Spiralgraph,
     HeartWave,
     Square,
@@ -45,10 +47,11 @@ pub struct Controller {
     solver: SCurveSolver,
     predictor: Predictor,
     wait_count: usize,
+    gcode_path: Option<PathBuf>,
 }
 
 impl Controller {
-    pub fn new() -> Controller {
+    pub fn new(gcode_path: Option<PathBuf>) -> Controller {
         let motors = [Side::Left, Side::Right].map(|s| Motor::new(s));
         let physical = Physical::new();
         info!("Physical: {physical}");
@@ -68,6 +71,7 @@ impl Controller {
             s_curve: SCurve::default(),
             predictor: Predictor::default(),
             wait_count: 0,
+            gcode_path,
         }
     }
     fn get_scalar_from_user() -> Result<f64, ()> {
@@ -113,7 +117,7 @@ impl Controller {
         Ok(PositionMM::new(xy))
     }
     fn set_mode_from_user(&mut self) {
-        println!("What should we do? (M)ove, (S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave set (P)osition");
+        println!("What should we do? (M)ove, (R)un gcode, (S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave, or set (P)osition");
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             log::error!("error: {error}");
@@ -139,6 +143,7 @@ impl Controller {
             'h' => ControllerMode::HeartWave,
             'g' => ControllerMode::Spiralgraph,
             'p' => ControllerMode::QueryPosition,
+            'r' => ControllerMode::RunGCode,
             _ => {
                 println!("Unknown mode.");
                 ControllerMode::Ask
@@ -362,10 +367,7 @@ impl Controller {
         if radius.is_err() {
             return Err(());
         }
-        let coords = spiralgraph(
-            &self.current_position.into(),
-            &radius.unwrap(),
-        );
+        let coords = spiralgraph(&self.current_position.into(), &radius.unwrap());
         Ok(coords)
     }
 
@@ -375,10 +377,7 @@ impl Controller {
         if size.is_err() {
             return Err(());
         }
-        let coords = heart_wave(
-            &self.current_position.into(),
-            &size.unwrap(),
-        );
+        let coords = heart_wave(&self.current_position.into(), &size.unwrap());
         Ok(coords)
     }
 
@@ -414,6 +413,14 @@ impl Controller {
                 }
             }
         }
+    }
+
+    fn run_gcode(&mut self) {
+        if self.gcode_path.is_none() {
+            println!("No gcode path specified!");
+            return;
+        }
+        let gcode_file = GCodeFile::read_file(self.gcode_path.as_ref().unwrap());
     }
 
     pub fn update(&mut self) {
@@ -468,6 +475,10 @@ impl Controller {
             }
             ControllerMode::HeartWave => {
                 self.draw_pattern(Pattern::HeartWave);
+                self.mode = ControllerMode::Ask;
+            }
+            ControllerMode::RunGCode => {
+                self.run_gcode();
                 self.mode = ControllerMode::Ask;
             }
         }

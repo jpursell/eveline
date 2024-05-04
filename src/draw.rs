@@ -79,8 +79,8 @@ pub fn spiralgraph(position: &PositionMM, radius: &f64) -> Vec<PositionMM> {
 
 pub fn heart_wave(position: &PositionMM, size: &f64) -> Vec<PositionMM> {
     let a = 20.0;
-    let mut x_arr: Array1::<f64> = Array::linspace(-2.0, 2.0, 500);
-    let mut y_arr: Array1::<f64> = x_arr.mapv(|x| {
+    let mut x_arr: Array1<f64> = Array::linspace(-2.0, 2.0, 500);
+    let mut y_arr: Array1<f64> = x_arr.mapv(|x| {
         x.abs().powf(2.0 / 3.0)
             + 0.9 * (3.3 - x.powi(2)).powf(0.5) * (a * std::f64::consts::PI * x).sin()
     });
@@ -92,13 +92,13 @@ pub fn heart_wave(position: &PositionMM, size: &f64) -> Vec<PositionMM> {
         }
     });
 
-    let cur_size = pts[pts.len()-1].x() - pts[0].x();
+    let cur_size = pts[pts.len() - 1].x() - pts[0].x();
     let scale = size / cur_size;
 
     let mut pts2 = Vec::new();
     for pt in &pts {
         let x = (pt.x() - pts[0].x()) * scale + position.x();
-        let y = (pt.y() - pts[0].y()) * scale +  position.y();
+        let y = (pt.y() - pts[0].y()) * scale + position.y();
         pts2.push(PositionMM::new([x, y]));
     }
     pts2
