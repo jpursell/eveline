@@ -47,8 +47,8 @@ impl Physical {
         let max_steps_per_second = max_revs_per_second * motor_steps_per_revolution as f32;
         // max velocity is about 5 mm/s
         let max_velocity = max_steps_per_second / steps_per_mm as f32;
-        let x_limits = [45.0, 260.0];
-        let y_limits = [50.0, 328.0];
+        let x_limits = [45.0, 250.0];
+        let y_limits = [70.0, 328.0];
         let y_offset = -15.0;
         Physical {
             motor_pos,
