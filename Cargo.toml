@@ -7,9 +7,11 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.82"
+async-gcode = "0.3.0"
 clap = { version = "4.5.4", features = ["derive"] }
 env_logger = "0.11.3"
-gcode = "0.6.1"
+futures = "0.3.30"
+futures-executor = "0.3.30"
 log = "0.4.21"
 nalgebra = "0.32.5"
 ndarray = "0.15.6"
