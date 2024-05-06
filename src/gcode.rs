@@ -98,20 +98,20 @@ impl GCode {
     }
 }
 
-pub struct GCodeFile {
+pub struct GCodeProgram {
     codes: Vec<GCode>,
     x_limits: AxisLimit,
     y_limits: AxisLimit,
 }
 
-impl GCodeFile {
+impl GCodeProgram {
     fn new(codes: Vec<GCode>) -> Self {
         let mut x_limits = AxisLimit::new();
         let mut y_limits = AxisLimit::new();
         for code in codes.iter() {
             code.update_limits(&mut x_limits, &mut y_limits);
         }
-        GCodeFile {
+        GCodeProgram {
             codes,
             x_limits,
             y_limits,
@@ -119,11 +119,11 @@ impl GCodeFile {
     }
 }
 
-impl Display for GCodeFile {
+impl Display for GCodeProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "GCodeFile: npts: {}, x_limits: {}, y_limits: {}",
+            "GCodeProgram: npts: {}, x_limits: {}, y_limits: {}",
             self.codes.len(),
             self.x_limits,
             self.y_limits
@@ -131,8 +131,8 @@ impl Display for GCodeFile {
     }
 }
 
-impl GCodeFile {
-    pub fn read_file(path: &Path) -> GCodeFile {
+impl GCodeProgram {
+    pub fn read_file(path: &Path) -> Self {
         let file = File::open(path).expect("failed to open file");
         let mut reader = BufReader::new(file);
         let mut buf = Vec::new();
@@ -186,6 +186,6 @@ impl GCodeFile {
                 }
             }
         });
-        GCodeFile::new(codes)
+        GCodeProgram::new(codes)
     }
 }

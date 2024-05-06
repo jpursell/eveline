@@ -4,7 +4,7 @@ use log::info;
 
 use crate::{
     draw::{heart_wave, spiralgraph, square, star, wave, Pattern},
-    gcode::GCodeFile,
+    gcode::GCodeProgram,
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -48,6 +48,7 @@ pub struct Controller {
     predictor: Predictor,
     wait_count: usize,
     gcode_path: Option<PathBuf>,
+    gcode_program: Option<GCodeProgram>,
 }
 
 impl Controller {
@@ -59,6 +60,7 @@ impl Controller {
         let max_jerk = 1e9;
         let solver = SCurveSolver::new(&physical, max_acceleration, max_jerk);
         info!("solver: {solver}");
+        let gcode_program = Controller::load_gcode(&gcode_path);
         Controller {
             current_position: Position::default(),
             current_position_initialized: false,
@@ -72,8 +74,26 @@ impl Controller {
             predictor: Predictor::default(),
             wait_count: 0,
             gcode_path,
+            gcode_program,
         }
     }
+
+    // TODO: implement set_gcode_start_point
+    // TODO: implement draw_gcode_instruction
+    // TODO: change run_gcode to use draw_code_instruction and move to next until end
+    // TODO: implement len_lift pause
+    // TODO: implement better timing info
+
+    fn load_gcode(gcode_path: &Option<PathBuf>) -> Option<GCodeProgram> {
+        if gcode_path.is_none() {
+            return None;
+        }
+        let mut gcode_file = GCodeProgram::read_file(gcode_path.as_ref().unwrap());
+        info!("read: {}", gcode_path.as_ref().unwrap().to_str().unwrap());
+        info!("{}", gcode_file);
+        Some(gcode_file)
+    }
+
     fn get_scalar_from_user() -> Result<f64, ()> {
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
@@ -413,16 +433,6 @@ impl Controller {
                 }
             }
         }
-    }
-
-    fn run_gcode(&mut self) {
-        if self.gcode_path.is_none() {
-            println!("No gcode path specified!");
-            return;
-        }
-        let mut gcode_file = GCodeFile::read_file(self.gcode_path.as_ref().unwrap());
-        println!("read: {}", self.gcode_path.as_ref().unwrap().to_str().unwrap());
-        println!("{}", gcode_file);
     }
 
     pub fn update(&mut self) {
