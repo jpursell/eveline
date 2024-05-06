@@ -420,7 +420,9 @@ impl Controller {
             println!("No gcode path specified!");
             return;
         }
-        let gcode_file = GCodeFile::read_file(self.gcode_path.as_ref().unwrap());
+        let mut gcode_file = GCodeFile::read_file(self.gcode_path.as_ref().unwrap());
+        println!("read: {}", self.gcode_path.as_ref().unwrap().to_str().unwrap());
+        println!("{}", gcode_file);
     }
 
     pub fn update(&mut self) {

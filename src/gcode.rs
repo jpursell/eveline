@@ -1,14 +1,50 @@
 // use anyhow::Result;
 use std::{
+    fmt::Display,
     fs::File,
-    io::{BufRead, BufReader, Read},
+    io::{BufReader, Read},
     path::Path,
-    str::FromStr,
 };
 
 use async_gcode::{Error, Literal, Parser, RealValue};
 use futures::stream;
 use futures_executor::block_on;
+
+#[derive(Default)]
+struct AxisLimit {
+    val: Option<[f64; 2]>,
+}
+
+impl AxisLimit {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn update(&mut self, val: &f64) {
+        match &mut self.val {
+            Some([val_min, val_max]) => {
+                *val_min = val_min.min(*val);
+                *val_max = val_max.max(*val);
+            }
+            None => {
+                self.val = Some([*val; 2]);
+            }
+        }
+    }
+}
+
+impl Display for AxisLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.val {
+            Some([val_min, val_max]) => {
+                write!(f, "AxisLimit: [{}, {}]", val_min, val_max)
+            }
+            None => {
+                write!(f, "AxisLimit: None")
+            }
+        }
+    }
+}
 
 #[derive(Debug, PartialEq)]
 enum GCommand {
@@ -38,7 +74,9 @@ impl GCode {
             21.0 => Some(GCommand::UseMM),
             90.0 => Some(GCommand::AbsoluteDistance),
             28.0 => Some(GCommand::AutoHoming),
-            _ => {panic!("got {val}");}
+            _ => {
+                panic!("got {val}");
+            }
         };
     }
     fn with_x(&mut self, val: f64) {
@@ -50,41 +88,51 @@ impl GCode {
     fn with_z(&mut self, val: f64) {
         self.z = Some(val);
     }
-}
-
-impl FromStr for GCode {
-    type Err = ();
-
-    /// Parse gcode strings i.e.
-    /// (comment)
-    /// G21 (comment)
-    /// G1 F8000 (set speed)
-    /// G0 X15.254 Y82.542
-    /// G1 Z0
-    fn from_str(s: &str) -> Result<Self, ()> {
-        let mut s = s.trim();
-        let l_paren = s.find('(');
-        if l_paren.is_some() {
-            let r_paren = s.find(')');
-            if r_paren.is_none() {
-                panic!();
-                // return Err(())
-            }
+    fn update_limits(&self, x_limits: &mut AxisLimit, y_limits: &mut AxisLimit) {
+        if self.x.is_some() {
+            x_limits.update(&self.x.unwrap());
         }
-        todo!()
+        if self.y.is_some() {
+            y_limits.update(&self.y.unwrap());
+        }
     }
 }
 
 pub struct GCodeFile {
     codes: Vec<GCode>,
+    x_limits: AxisLimit,
+    y_limits: AxisLimit,
 }
 
 impl GCodeFile {
-    pub fn read_file(path: &Path) {
-        // let path = path.to_str().unwrap();
-        // for code in parse(path) {
-        //     println!("{}", code);
-        // }
+    fn new(codes: Vec<GCode>) -> Self {
+        let mut x_limits = AxisLimit::new();
+        let mut y_limits = AxisLimit::new();
+        for code in codes.iter() {
+            code.update_limits(&mut x_limits, &mut y_limits);
+        }
+        GCodeFile {
+            codes,
+            x_limits,
+            y_limits,
+        }
+    }
+}
+
+impl Display for GCodeFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "GCodeFile: npts: {}, x_limits: {}, y_limits: {}",
+            self.codes.len(),
+            self.x_limits,
+            self.y_limits
+        )
+    }
+}
+
+impl GCodeFile {
+    pub fn read_file(path: &Path) -> GCodeFile {
         let file = File::open(path).expect("failed to open file");
         let mut reader = BufReader::new(file);
         let mut buf = Vec::new();
@@ -123,23 +171,21 @@ impl GCodeFile {
                             },
                             async_gcode::GCode::Execute => {
                                 if gcode != GCode::default() {
-                                    dbg!(&gcode);
                                     codes.push(gcode);
                                     gcode = GCode::new();
                                 }
                             }
                         },
-                        Err(_) => todo!(),
+                        Err(e) => {
+                            log::error!("Got error: {e:?}");
+                            continue;
+                        }
                     }
                 } else {
                     break;
                 }
             }
-        })
-
-        // for line in reader.lines() {
-        //     let line = line?;
-        //     println!("{}", line);
-        // }
+        });
+        GCodeFile::new(codes)
     }
 }
