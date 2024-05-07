@@ -1,10 +1,10 @@
-use std::{io, path::PathBuf, thread, time::Duration};
+use std::{borrow::BorrowMut, io, path::PathBuf, thread, time::Duration};
 
 use log::info;
 
 use crate::{
     draw::{heart_wave, spiralgraph, square, star, wave, Pattern},
-    gcode::GCodeProgram,
+    gcode::{AxisLimit, GCodeProgram},
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -27,6 +27,7 @@ enum ControllerMode {
     Square,
     Star,
     Wave,
+    ScaleGCode,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -136,23 +137,31 @@ impl Controller {
         };
         Ok(PositionMM::new(xy))
     }
-    fn set_mode_from_user(&mut self) {
-        println!("What should we do? (M)ove, (R)un gcode, (S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave, or set (P)osition");
+
+    fn get_char_from_user() -> Result<char, ()> {
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             log::error!("error: {error}");
-            return;
+            return Err(());
         }
 
         let input = input.trim();
         let first_char = input.chars().next();
         if first_char.is_none() {
             println!("Nothing entered");
-            return;
+            return Err(());
         }
         let first_char = first_char.unwrap().to_lowercase().next();
         if first_char.is_none() {
-            println!("Could not convert to lowercase");
+            return Err(());
+        }
+        Ok(first_char.unwrap())
+    }
+
+    fn set_mode_from_user(&mut self) {
+        println!("What should we do? (M)ove, (R)un gcode, (S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave, or set (P)osition");
+        let first_char = Controller::get_char_from_user();
+        if first_char.is_err() {
             return;
         }
         self.mode = match first_char.unwrap() {
@@ -164,6 +173,7 @@ impl Controller {
             'g' => ControllerMode::Spiralgraph,
             'p' => ControllerMode::QueryPosition,
             'r' => ControllerMode::RunGCode,
+            'c' => ControllerMode::ScaleGCode,
             _ => {
                 println!("Unknown mode.");
                 ControllerMode::Ask
@@ -435,6 +445,48 @@ impl Controller {
         }
     }
 
+    fn get_axis_limit_from_user() -> Result<AxisLimit, ()> {
+        Controller::get_position_from_user().map(|p| AxisLimit::from(p))
+    }
+    fn scale_gcode(&mut self) {
+        if self.gcode_program.is_none() {
+            println!("No program loaded!");
+            return
+        }
+        println!("What should the x limits be? (val,val)");
+        let x_limits : Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
+        if x_limits.is_err() {
+            return;
+        }
+        println!("What should the y limits be? (val,val)");
+        let y_limits : Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
+        if y_limits.is_err() {
+            return;
+        }
+        println!("Preserve aspect Ratio? (y,n)");
+        let reply = Controller::get_char_from_user();
+        if reply.is_err() {
+            return;
+        }
+        match reply.unwrap() {
+            'y' => {
+                let prog = &mut self.gcode_program.borrow_mut().unwrap();
+                prog.scale_x(x_limits.unwrap());
+                prog.scale_y(x_limits.unwrap());
+            }
+            'n' => {
+                let prog = &mut self.gcode_program.borrow_mut().unwrap();
+                prog.scale_preserve_aspect(x_limits.unwrap(), y_limits.unwrap());
+            }
+
+            x => {
+                error!("got {x}");
+                return;
+            }
+
+        }
+    }
+
     pub fn update(&mut self) {
         match self.mode {
             ControllerMode::Ask => {
@@ -492,6 +544,9 @@ impl Controller {
             ControllerMode::RunGCode => {
                 self.run_gcode();
                 self.mode = ControllerMode::Ask;
+            }
+            ControllerMode::ScaleGCode => {
+                self.scale_gcode();
             }
         }
     }

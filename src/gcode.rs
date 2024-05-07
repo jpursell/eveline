@@ -10,17 +10,24 @@ use async_gcode::{Error, Literal, Parser, RealValue};
 use futures::stream;
 use futures_executor::block_on;
 
+use crate::position::PositionMM;
+
+struct AxisScaler {
+    offset: f64,
+    scale: f64,
+}
+
 #[derive(Default)]
-struct AxisLimit {
+pub struct AxisLimit {
     val: Option<[f64; 2]>,
 }
 
 impl AxisLimit {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
-    fn update(&mut self, val: &f64) {
+    pub fn update(&mut self, val: &f64) {
         match &mut self.val {
             Some([val_min, val_max]) => {
                 *val_min = val_min.min(*val);
@@ -30,6 +37,29 @@ impl AxisLimit {
                 self.val = Some([*val; 2]);
             }
         }
+    }
+
+    fn scale_to(&self, other: &AxisLimit)  -> Option<AxisScaler> {
+        if self.val.is_none() || other.val.is_none() {
+            return None;
+        }
+        let cur_val = &self.val.unwrap();
+        let other_val = &self.val.unwrap();
+        let cur_scale = cur_val[1] - cur_val[0];
+        let other_scale = other_val[1] - other_val[0];
+        let scale = other_scale / cur_scale;
+        let offset = other_val[0] - cur_val[0] * scale;
+        todo!()
+
+    }
+}
+
+impl From<PositionMM> for AxisLimit {
+    fn from(value: PositionMM) -> Self {
+        let mut limit = AxisLimit::new();
+        limit.update(value.x());
+        limit.update(value.y());
+        limit
     }
 }
 
@@ -98,6 +128,10 @@ impl GCode {
     }
 }
 
+enum Axis {
+    X,
+    Y
+}
 pub struct GCodeProgram {
     codes: Vec<GCode>,
     x_limits: AxisLimit,
@@ -116,6 +150,18 @@ impl GCodeProgram {
             x_limits,
             y_limits,
         }
+    }
+    fn scale_axis(&mut self, limit: &AxisLimit, axis: Axis) {
+        let cur_limits = match axis {
+            Axis::X => &self.x_limits,
+            Axis::Y => &self.y_limits,
+        };
+    }
+    pub fn scale_x(&mut self, limit: &AxisLimit) {
+        self.scale_axis(limit, Axis::X);
+    }
+    pub fn scale_y(&mut self, limit: &AxisLimit) {
+        self.scale_axis(limit, Axis::Y);
     }
 }
 
