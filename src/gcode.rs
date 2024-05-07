@@ -12,17 +12,26 @@ use futures_executor::block_on;
 
 use crate::position::PositionMM;
 
-struct AxisScaler {
-    offset: f64,
+struct AxisTransformer {
     scale: f64,
+    offset: f64,
+}
+
+impl AxisTransformer {
+    fn new(scale: f64, offset: f64) -> Self {
+        AxisTransformer { scale, offset }
+    }
+    fn transform(&self, val:&f64) -> f64 {
+        val * self.scale + self.offset;
+    }
 }
 
 #[derive(Default)]
-pub struct AxisLimit {
+pub struct MaybeAxisLimit {
     val: Option<[f64; 2]>,
 }
 
-impl AxisLimit {
+impl MaybeAxisLimit {
     pub fn new() -> Self {
         Self::default()
     }
@@ -39,40 +48,94 @@ impl AxisLimit {
         }
     }
 
-    fn scale_to(&self, other: &AxisLimit)  -> Option<AxisScaler> {
+    fn scale_to(&self, other: &MaybeAxisLimit) -> Option<AxisTransformer> {
         if self.val.is_none() || other.val.is_none() {
             return None;
         }
         let cur_val = &self.val.unwrap();
-        let other_val = &self.val.unwrap();
+        let other_val = &other.val.unwrap();
         let cur_scale = cur_val[1] - cur_val[0];
         let other_scale = other_val[1] - other_val[0];
+        // if cur limit is [1,2] and other is [3,5]
+        // then scale becomes 2
         let scale = other_scale / cur_scale;
+        // and offset is 1
         let offset = other_val[0] - cur_val[0] * scale;
-        todo!()
-
+        // multiply by scale first and then add offset
+        Some(AxisTransformer::new(scale, offset))
     }
 }
 
-impl From<PositionMM> for AxisLimit {
+impl From<PositionMM> for MaybeAxisLimit {
     fn from(value: PositionMM) -> Self {
-        let mut limit = AxisLimit::new();
+        let mut limit = MaybeAxisLimit::new();
         limit.update(value.x());
         limit.update(value.y());
         limit
     }
 }
 
-impl Display for AxisLimit {
+impl Display for MaybeAxisLimit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.val {
             Some([val_min, val_max]) => {
-                write!(f, "AxisLimit: [{}, {}]", val_min, val_max)
+                write!(f, "MaybeAxisLimit: [{}, {}]", val_min, val_max)
             }
             None => {
-                write!(f, "AxisLimit: None")
+                write!(f, "MaybeAxisLimit: None")
             }
         }
+    }
+}
+
+#[derive(Default)]
+pub struct AxisLimit {
+    val: [f64; 2],
+}
+
+impl AxisLimit {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn scale_to(&self, other: &AxisLimit) -> AxisTransformer {
+        let cur_val = &self.val;
+        let other_val = &other.val;
+        let cur_scale = cur_val[1] - cur_val[0];
+        let other_scale = other_val[1] - other_val[0];
+        // if cur limit is [1,2] and other is [3,5]
+        // then scale becomes 2
+        let scale = other_scale / cur_scale;
+        // and offset is 1
+        let offset = other_val[0] - cur_val[0] * scale;
+        // multiply by scale first and then add offset
+        AxisTransformer::new(scale, offset)
+    }
+}
+
+impl TryFrom<MaybeAxisLimit> for AxisLimit {
+    type Error = ();
+
+    fn try_from(value: MaybeAxisLimit) -> Result<Self, Self::Error> {
+        match value.val {
+            Some(val) => Ok(Self{val}),
+            None => Err(()),
+        }
+    }
+}
+
+impl From<PositionMM> for AxisLimit {
+    fn from(value: PositionMM) -> Self {
+        let mut limit = MaybeAxisLimit::new();
+        limit.update(value.x());
+        limit.update(value.y());
+        limit.try_into().unwrap()
+    }
+}
+
+impl Display for AxisLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AxisLimit: [{}, {}]", self.val[0], self.val[1])
     }
 }
 
@@ -118,7 +181,7 @@ impl GCode {
     fn with_z(&mut self, val: f64) {
         self.z = Some(val);
     }
-    fn update_limits(&self, x_limits: &mut AxisLimit, y_limits: &mut AxisLimit) {
+    fn update_limits(&self, x_limits: &mut MaybeAxisLimit, y_limits: &mut MaybeAxisLimit) {
         if self.x.is_some() {
             x_limits.update(&self.x.unwrap());
         }
@@ -130,7 +193,7 @@ impl GCode {
 
 enum Axis {
     X,
-    Y
+    Y,
 }
 pub struct GCodeProgram {
     codes: Vec<GCode>,
@@ -139,12 +202,13 @@ pub struct GCodeProgram {
 }
 
 impl GCodeProgram {
-    fn new(codes: Vec<GCode>) -> Self {
-        let mut x_limits = AxisLimit::new();
-        let mut y_limits = AxisLimit::new();
+    fn new(codes: Vec<GCode>) -> Result<Self, ()> {
+        let mut x_limits = MaybeAxisLimit::new();
+        let mut y_limits = MaybeAxisLimit::new();
         for code in codes.iter() {
             code.update_limits(&mut x_limits, &mut y_limits);
         }
+        todo!("check if limits are valid")
         GCodeProgram {
             codes,
             x_limits,
