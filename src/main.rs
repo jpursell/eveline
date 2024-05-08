@@ -12,7 +12,7 @@ use clap::Parser;
 use log::info;
 use simple_signal::{self, Signal};
 use std::error::Error;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 

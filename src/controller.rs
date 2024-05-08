@@ -1,10 +1,10 @@
-use std::{borrow::BorrowMut, io, path::PathBuf, thread, time::Duration};
+use std::{io, path::PathBuf, thread, time::Duration};
 
-use log::info;
+use log::{error, info};
 
 use crate::{
     draw::{heart_wave, spiralgraph, square, star, wave, Pattern},
-    gcode::{AxisLimit, GCodeProgram},
+    gcode::{Axis, AxisLimit, GCodeProgram},
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -89,10 +89,18 @@ impl Controller {
         if gcode_path.is_none() {
             return None;
         }
-        let mut gcode_file = GCodeProgram::read_file(gcode_path.as_ref().unwrap());
-        info!("read: {}", gcode_path.as_ref().unwrap().to_str().unwrap());
-        info!("{}", gcode_file);
-        Some(gcode_file)
+        let gcode_file = GCodeProgram::read_file(gcode_path.as_ref().unwrap());
+        match gcode_file {
+            Err(_) => {
+                error!("Invalid gcode program");
+                None
+            }
+            Ok(gcode_file) => {
+                info!("read: {}", gcode_path.as_ref().unwrap().to_str().unwrap());
+                info!("{}", gcode_file);
+                Some(gcode_file)
+            }
+        }
     }
 
     fn get_scalar_from_user() -> Result<f64, ()> {
@@ -445,21 +453,45 @@ impl Controller {
         }
     }
 
+    fn run_gcode(&mut self) {
+        todo!();
+        for new_position in &pattern {
+            if !self.physical.in_bounds(new_position) {
+                println!("Point outside of bounds: {new_position}");
+                return;
+            }
+        }
+
+        for new_position in &pattern {
+            self.init_move(new_position);
+            loop {
+                match self.move_status {
+                    MoveStatus::Stopped => {
+                        break;
+                    }
+                    MoveStatus::Moving => {
+                        self.update_move();
+                    }
+                }
+            }
+        }
+    }
+
     fn get_axis_limit_from_user() -> Result<AxisLimit, ()> {
         Controller::get_position_from_user().map(|p| AxisLimit::from(p))
     }
     fn scale_gcode(&mut self) {
         if self.gcode_program.is_none() {
             println!("No program loaded!");
-            return
+            return;
         }
         println!("What should the x limits be? (val,val)");
-        let x_limits : Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
+        let x_limits: Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
         if x_limits.is_err() {
             return;
         }
         println!("What should the y limits be? (val,val)");
-        let y_limits : Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
+        let y_limits: Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
         if y_limits.is_err() {
             return;
         }
@@ -470,20 +502,19 @@ impl Controller {
         }
         match reply.unwrap() {
             'y' => {
-                let prog = &mut self.gcode_program.borrow_mut().unwrap();
-                prog.scale_x(x_limits.unwrap());
-                prog.scale_y(x_limits.unwrap());
+                let prog = &mut self.gcode_program.as_mut().unwrap();
+                prog.scale_axis(&x_limits.unwrap(), &Axis::X);
+                prog.scale_axis(&y_limits.unwrap(), &Axis::Y);
             }
             'n' => {
-                let prog = &mut self.gcode_program.borrow_mut().unwrap();
-                prog.scale_preserve_aspect(x_limits.unwrap(), y_limits.unwrap());
+                let prog = &mut self.gcode_program.as_mut().unwrap();
+                prog.scale_keep_aspect(&x_limits.unwrap(), &y_limits.unwrap());
             }
 
             x => {
                 error!("got {x}");
                 return;
             }
-
         }
     }
 
@@ -542,7 +573,10 @@ impl Controller {
                 self.mode = ControllerMode::Ask;
             }
             ControllerMode::RunGCode => {
+                todo!("Change this so we pass through here for each instruction");
+                self.current_instruction = 0;
                 self.run_gcode();
+                if self.cu
                 self.mode = ControllerMode::Ask;
             }
             ControllerMode::ScaleGCode => {

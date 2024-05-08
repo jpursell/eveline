@@ -21,8 +21,9 @@ impl AxisTransformer {
     fn new(scale: f64, offset: f64) -> Self {
         AxisTransformer { scale, offset }
     }
-    fn transform(&self, val:&f64) -> f64 {
-        val * self.scale + self.offset;
+    fn transform(&self, val:&mut f64) {
+        *val *= self.scale;
+        *val += self.offset;
     }
 }
 
@@ -34,6 +35,10 @@ pub struct MaybeAxisLimit {
 impl MaybeAxisLimit {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn is_none(&self) -> bool {
+        self.val.is_none()
     }
 
     pub fn update(&mut self, val: &f64) {
@@ -48,22 +53,6 @@ impl MaybeAxisLimit {
         }
     }
 
-    fn scale_to(&self, other: &MaybeAxisLimit) -> Option<AxisTransformer> {
-        if self.val.is_none() || other.val.is_none() {
-            return None;
-        }
-        let cur_val = &self.val.unwrap();
-        let other_val = &other.val.unwrap();
-        let cur_scale = cur_val[1] - cur_val[0];
-        let other_scale = other_val[1] - other_val[0];
-        // if cur limit is [1,2] and other is [3,5]
-        // then scale becomes 2
-        let scale = other_scale / cur_scale;
-        // and offset is 1
-        let offset = other_val[0] - cur_val[0] * scale;
-        // multiply by scale first and then add offset
-        Some(AxisTransformer::new(scale, offset))
-    }
 }
 
 impl From<PositionMM> for MaybeAxisLimit {
@@ -98,7 +87,7 @@ impl AxisLimit {
         Self::default()
     }
 
-    fn scale_to(&self, other: &AxisLimit) -> AxisTransformer {
+    fn transform_to(&self, other: &AxisLimit) -> AxisTransformer {
         let cur_val = &self.val;
         let other_val = &other.val;
         let cur_scale = cur_val[1] - cur_val[0];
@@ -160,6 +149,18 @@ impl GCode {
     fn new() -> Self {
         Self::default()
     }
+    pub fn transform(&mut self, transform: &AxisTransformer, axis: &Axis) {
+        let val = match axis {
+            Axis::X => &mut self.x,
+            Axis::Y => &mut self.y,
+        };
+        match val {
+            Some(inner_val) => {
+                transform.transform(inner_val);
+            }
+            None => (),
+        }
+    }
     fn with_g(&mut self, val: f64) {
         self.command = match val {
             0.0 => Some(GCommand::FastMove),
@@ -191,7 +192,7 @@ impl GCode {
     }
 }
 
-enum Axis {
+pub enum Axis {
     X,
     Y,
 }
@@ -208,24 +209,42 @@ impl GCodeProgram {
         for code in codes.iter() {
             code.update_limits(&mut x_limits, &mut y_limits);
         }
-        todo!("check if limits are valid")
-        GCodeProgram {
+        let x_limits = AxisLimit::try_from(x_limits)?;
+        let y_limits = AxisLimit::try_from(y_limits)?;
+        Ok(GCodeProgram {
             codes,
             x_limits,
             y_limits,
-        }
+        })
     }
-    fn scale_axis(&mut self, limit: &AxisLimit, axis: Axis) {
+    pub fn scale_axis(&mut self, limit: &AxisLimit, axis: &Axis) {
         let cur_limits = match axis {
             Axis::X => &self.x_limits,
             Axis::Y => &self.y_limits,
         };
+        let transformer = cur_limits.transform_to(limit);
+        for code in &mut self.codes {
+            code.transform(&transformer, axis);
+        }
     }
-    pub fn scale_x(&mut self, limit: &AxisLimit) {
-        self.scale_axis(limit, Axis::X);
-    }
-    pub fn scale_y(&mut self, limit: &AxisLimit) {
-        self.scale_axis(limit, Axis::Y);
+    /// Transform code to be in center
+    pub fn scale_keep_aspect(&mut self, x_limit: &AxisLimit, y_limit: &AxisLimit) {
+        let mut x_transform = self.x_limits.transform_to(x_limit);
+        let mut y_transform = self.y_limits.transform_to(y_limit);
+        let scale = x_transform.scale.min(y_transform.scale);
+        let (adjust, cur, other) = if x_transform.scale > y_transform.scale {
+            (&mut x_transform, &self.x_limits, &x_limit)
+        } else {
+            (&mut y_transform, &self.y_limits, &y_limit)
+        };
+        adjust.scale = scale;
+        let cur_middle = (cur.val[0] + cur.val[1]) / 2.0;
+        let other_middle = (other.val[0] + other.val[1]) / 2.0;
+        adjust.offset = other_middle - cur_middle * scale;
+        for code in &mut self.codes {
+            code.transform(&x_transform, &Axis::X);
+            code.transform(&y_transform, &Axis::Y);
+        }
     }
 }
 
@@ -242,7 +261,7 @@ impl Display for GCodeProgram {
 }
 
 impl GCodeProgram {
-    pub fn read_file(path: &Path) -> Self {
+    pub fn read_file(path: &Path) -> Result<GCodeProgram, ()> {
         let file = File::open(path).expect("failed to open file");
         let mut reader = BufReader::new(file);
         let mut buf = Vec::new();
