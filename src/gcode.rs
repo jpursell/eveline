@@ -21,7 +21,7 @@ impl AxisTransformer {
     fn new(scale: f64, offset: f64) -> Self {
         AxisTransformer { scale, offset }
     }
-    fn transform(&self, val:&mut f64) {
+    fn transform(&self, val: &mut f64) {
         *val *= self.scale;
         *val += self.offset;
     }
@@ -52,7 +52,6 @@ impl MaybeAxisLimit {
             }
         }
     }
-
 }
 
 impl From<PositionMM> for MaybeAxisLimit {
@@ -107,7 +106,7 @@ impl TryFrom<MaybeAxisLimit> for AxisLimit {
 
     fn try_from(value: MaybeAxisLimit) -> Result<Self, Self::Error> {
         match value.val {
-            Some(val) => Ok(Self{val}),
+            Some(val) => Ok(Self { val }),
             None => Err(()),
         }
     }
@@ -203,7 +202,7 @@ pub struct GCodeProgram {
 }
 
 impl GCodeProgram {
-    fn new(codes: Vec<GCode>) -> Result<Self, ()> {
+    fn compute_limits(codes: &Vec<GCode>) -> Result<[AxisLimit; 2], ()> {
         let mut x_limits = MaybeAxisLimit::new();
         let mut y_limits = MaybeAxisLimit::new();
         for code in codes.iter() {
@@ -211,6 +210,10 @@ impl GCodeProgram {
         }
         let x_limits = AxisLimit::try_from(x_limits)?;
         let y_limits = AxisLimit::try_from(y_limits)?;
+        Ok([x_limits, y_limits])
+    }
+    fn new(codes: Vec<GCode>) -> Result<Self, ()> {
+        let [x_limits, y_limits] = GCodeProgram::compute_limits(&codes)?;
         Ok(GCodeProgram {
             codes,
             x_limits,
@@ -226,6 +229,7 @@ impl GCodeProgram {
         for code in &mut self.codes {
             code.transform(&transformer, axis);
         }
+        todo!("update limits and make sure they look right");
     }
     /// Transform code to be in center
     pub fn scale_keep_aspect(&mut self, x_limit: &AxisLimit, y_limit: &AxisLimit) {
@@ -245,6 +249,7 @@ impl GCodeProgram {
             code.transform(&x_transform, &Axis::X);
             code.transform(&y_transform, &Axis::Y);
         }
+        todo!("update limits and make sure they look right");
     }
 }
 

@@ -21,6 +21,7 @@ enum ControllerMode {
     QueryPosition,
     Moving,
     Complete,
+    InitGCode,
     RunGCode,
     Spiralgraph,
     HeartWave,
@@ -180,7 +181,7 @@ impl Controller {
             'h' => ControllerMode::HeartWave,
             'g' => ControllerMode::Spiralgraph,
             'p' => ControllerMode::QueryPosition,
-            'r' => ControllerMode::RunGCode,
+            'r' => ControllerMode::InitGCode,
             'c' => ControllerMode::ScaleGCode,
             _ => {
                 println!("Unknown mode.");
@@ -572,12 +573,17 @@ impl Controller {
                 self.draw_pattern(Pattern::HeartWave);
                 self.mode = ControllerMode::Ask;
             }
-            ControllerMode::RunGCode => {
-                todo!("Change this so we pass through here for each instruction");
+            ControllerMode::InitGCode => {
+                todo!("check gcode bounds");
                 self.current_instruction = 0;
+                self.mode = ControllerMode::RunGCode;
+            }
+            ControllerMode::RunGCode => {
                 self.run_gcode();
-                if self.cu
-                self.mode = ControllerMode::Ask;
+                self.current_instruction += 1;
+                if self.current_instruction == self.gcode_program.len() {
+                    self.mode = ControllerMode::Ask;
+                }
             }
             ControllerMode::ScaleGCode => {
                 self.scale_gcode();
