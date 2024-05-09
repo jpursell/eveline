@@ -142,6 +142,7 @@ struct GCode {
     x: Option<f64>,
     y: Option<f64>,
     z: Option<f64>,
+    comment: Option<String>,
 }
 
 impl GCode {
@@ -181,6 +182,9 @@ impl GCode {
     fn with_z(&mut self, val: f64) {
         self.z = Some(val);
     }
+    fn with_comment(&mut self, val: String) {
+        self.comment = Some(val);
+    }
     fn update_limits(&self, x_limits: &mut MaybeAxisLimit, y_limits: &mut MaybeAxisLimit) {
         if self.x.is_some() {
             x_limits.update(&self.x.unwrap());
@@ -195,6 +199,38 @@ pub enum Axis {
     X,
     Y,
 }
+
+pub enum PlotterInstruction {
+    Move(PositionMM),
+    PenUp,
+    PenDown,
+    Comment(String),
+}
+
+impl TryFrom<GCode> for PlotterInstruction {
+    type Error = ();
+
+    fn try_from(value: GCode) -> Result<Self, Self::Error> {
+        match value.command {
+            Some(command) => match command {
+                GCommand::Move | GCommand::FastMove => todo!(),
+                GCommand::UseMM | GCommand::AbsoluteDistance  | GCommand::AutoHoming => {
+                    match value.comment {
+                        Some(val) => Ok(PlotterInstruction::Comment(val)),
+                        None => Err(())
+                    }
+                }
+            }
+            None => {
+                match value.comment {
+                    Some(val) => Ok(PlotterInstruction::Comment(val)),
+                    None => Err(()),
+                }
+            }
+        }
+    }
+}
+
 pub struct GCodeProgram {
     codes: Vec<GCode>,
     x_limits: AxisLimit,
