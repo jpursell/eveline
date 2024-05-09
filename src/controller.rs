@@ -455,27 +455,23 @@ impl Controller {
     }
 
     fn run_gcode(&mut self) {
-        todo!();
-        for new_position in &pattern {
-            if !self.physical.in_bounds(new_position) {
-                println!("Point outside of bounds: {new_position}");
-                return;
-            }
+        let instruction:PlotterInstruction = self.gcode_program.unwrap().codes[self.current_instruction];
+        match instruction {
+            todo!();
         }
-
-        for new_position in &pattern {
-            self.init_move(new_position);
-            loop {
-                match self.move_status {
-                    MoveStatus::Stopped => {
-                        break;
-                    }
-                    MoveStatus::Moving => {
-                        self.update_move();
-                    }
-                }
-            }
-        }
+        // for new_position in &pattern {
+        //     self.init_move(new_position);
+        //     loop {
+        //         match self.move_status {
+        //             MoveStatus::Stopped => {
+        //                 break;
+        //             }
+        //             MoveStatus::Moving => {
+        //                 self.update_move();
+        //             }
+        //         }
+        //     }
+        // }
     }
 
     fn get_axis_limit_from_user() -> Result<AxisLimit, ()> {
@@ -574,11 +570,21 @@ impl Controller {
                 self.mode = ControllerMode::Ask;
             }
             ControllerMode::InitGCode => {
+                if self.gcode_program.is_none() {
+                    info!("No GCode Loaded");
+                    self.mode = ControllerMode::Ask;
+                    return
+                }
                 todo!("check gcode bounds");
                 self.current_instruction = 0;
                 self.mode = ControllerMode::RunGCode;
             }
             ControllerMode::RunGCode => {
+                if self.gcode_program.is_none() {
+                    info!("No GCode Loaded");
+                    self.mode = ControllerMode::Ask;
+                    return
+                }
                 self.run_gcode();
                 self.current_instruction += 1;
                 if self.current_instruction == self.gcode_program.len() {
