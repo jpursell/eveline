@@ -200,12 +200,37 @@ pub enum Axis {
     Y,
 }
 
+#[derive(Clone)]
 pub enum PlotterInstruction {
     Move(PositionMM),
     PenUp,
     PenDown,
     Comment(String),
     NoOp,
+}
+
+impl PlotterInstruction {
+    fn update_limits(&self, x_limits: &mut MaybeAxisLimit, y_limits: &mut MaybeAxisLimit) {
+        match self {
+            PlotterInstruction::Move(pos) => {
+                x_limits.update(pos.x());
+                y_limits.update(pos.y());
+            }
+            _ => (),
+        }
+    }
+    pub fn transform(&mut self, transform: &AxisTransformer, axis: &Axis) {
+        match self {
+            PlotterInstruction::Move(pos) => {
+                let inner_val: &mut f64 = match axis {
+                    Axis::X => pos.x_mut(),
+                    Axis::Y => pos.y_mut(),
+                };
+                transform.transform(inner_val);
+            }
+            _ => (),
+        }
+    }
 }
 
 impl TryFrom<GCode> for PlotterInstruction {
@@ -259,10 +284,26 @@ pub struct PlotterProgram {
     instructions: Vec<PlotterInstruction>,
     x_limits: AxisLimit,
     y_limits: AxisLimit,
+    current_position: usize,
+}
+
+impl Iterator for PlotterProgram {
+    type Item = PlotterInstruction;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_position >= self.instructions.len() {
+            return None;
+        }
+        let instruction = Some(self.instructions[self.current_position].clone());
+        self.current_position += 1;
+        instruction
+    }
 }
 
 impl PlotterProgram {
-    fn compute_limits(instructions: &Vec<PlotterInstruction>) -> Result<[AxisLimit; 2], &'static str> {
+    fn compute_limits(
+        instructions: &Vec<PlotterInstruction>,
+    ) -> Result<[AxisLimit; 2], &'static str> {
         let mut x_limits = MaybeAxisLimit::new();
         let mut y_limits = MaybeAxisLimit::new();
         for instruction in instructions.iter() {
@@ -278,7 +319,17 @@ impl PlotterProgram {
             instructions,
             x_limits,
             y_limits,
+            current_position: 0,
         })
+    }
+    pub fn reset(&mut self) {
+        self.current_position = 0;
+    }
+    pub fn len(&self) -> usize {
+        self.instructions.len()
+    }
+    pub fn current_position(&self) -> usize {
+        self.current_position
     }
     pub fn scale_axis(&mut self, limit: &AxisLimit, axis: &Axis) {
         let cur_limits = match axis {
@@ -389,8 +440,10 @@ impl PlotterProgram {
         for code in codes {
             let instruction = PlotterInstruction::try_from(code)?;
             match instruction {
-                PlotterInstruction::NoOp => {continue;}
-                _ => ()
+                PlotterInstruction::NoOp => {
+                    continue;
+                }
+                _ => (),
             }
             instructions.push(instruction)
         }

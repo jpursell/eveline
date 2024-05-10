@@ -58,6 +58,12 @@ impl PositionMM {
     pub fn y(&self) -> &f64 {
         &self.xy[1]
     }
+    pub fn x_mut(&mut self) -> &mut f64 {
+        &mut self.xy[0]
+    }
+    pub fn y_mut(&mut self) -> &mut f64 {
+        &mut self.xy[1]
+    }
 }
 
 impl Display for PositionMM {

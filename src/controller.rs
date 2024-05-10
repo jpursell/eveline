@@ -4,7 +4,7 @@ use log::{error, info};
 
 use crate::{
     draw::{heart_wave, spiralgraph, square, star, wave, Pattern},
-    gcode::{Axis, AxisLimit, PlotterProgram},
+    gcode::{Axis, AxisLimit, PlotterInstruction, PlotterProgram},
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -50,7 +50,7 @@ pub struct Controller {
     predictor: Predictor,
     wait_count: usize,
     gcode_path: Option<PathBuf>,
-    gcode_program: Option<PlotterProgram>,
+    program: Option<PlotterProgram>,
 }
 
 impl Controller {
@@ -76,7 +76,7 @@ impl Controller {
             predictor: Predictor::default(),
             wait_count: 0,
             gcode_path,
-            gcode_program,
+            program: gcode_program,
         }
     }
 
@@ -454,31 +454,33 @@ impl Controller {
         }
     }
 
-    fn run_gcode(&mut self) {
-        let instruction:PlotterInstruction = self.gcode_program.unwrap().codes[self.current_instruction];
+    fn run_instruction(&mut self, instruction: &PlotterInstruction) {
         match instruction {
-            todo!();
+            PlotterInstruction::Move(new_position) => {
+                self.init_move(&new_position);
+                loop {
+                    match self.move_status {
+                        MoveStatus::Stopped => {
+                            break;
+                        }
+                        MoveStatus::Moving => {
+                            self.update_move();
+                        }
+                    }
+                }
+            }
+            PlotterInstruction::PenUp => todo!(),
+            PlotterInstruction::PenDown => todo!(),
+            PlotterInstruction::Comment(_) => todo!(),
+            PlotterInstruction::NoOp => todo!(),
         }
-        // for new_position in &pattern {
-        //     self.init_move(new_position);
-        //     loop {
-        //         match self.move_status {
-        //             MoveStatus::Stopped => {
-        //                 break;
-        //             }
-        //             MoveStatus::Moving => {
-        //                 self.update_move();
-        //             }
-        //         }
-        //     }
-        // }
     }
 
     fn get_axis_limit_from_user() -> Result<AxisLimit, ()> {
         Controller::get_position_from_user().map(|p| AxisLimit::from(p))
     }
     fn scale_gcode(&mut self) {
-        if self.gcode_program.is_none() {
+        if self.program.is_none() {
             println!("No program loaded!");
             return;
         }
@@ -499,12 +501,12 @@ impl Controller {
         }
         match reply.unwrap() {
             'y' => {
-                let prog = &mut self.gcode_program.as_mut().unwrap();
+                let prog = &mut self.program.as_mut().unwrap();
                 prog.scale_axis(&x_limits.unwrap(), &Axis::X);
                 prog.scale_axis(&y_limits.unwrap(), &Axis::Y);
             }
             'n' => {
-                let prog = &mut self.gcode_program.as_mut().unwrap();
+                let prog = &mut self.program.as_mut().unwrap();
                 prog.scale_keep_aspect(&x_limits.unwrap(), &y_limits.unwrap());
             }
 
@@ -569,26 +571,28 @@ impl Controller {
                 self.draw_pattern(Pattern::HeartWave);
                 self.mode = ControllerMode::Ask;
             }
-            ControllerMode::InitGCode => {
-                if self.gcode_program.is_none() {
+            ControllerMode::InitGCode => match self.program.as_mut() {
+                Some(ref mut program) => {
+                    program.reset();
+                    todo!("check gcode bounds");
+                    self.mode = ControllerMode::RunGCode;
+                }
+                None => {
                     info!("No GCode Loaded");
                     self.mode = ControllerMode::Ask;
-                    return
                 }
-                todo!("check gcode bounds");
-                self.current_instruction = 0;
-                self.mode = ControllerMode::RunGCode;
-            }
+            },
             ControllerMode::RunGCode => {
-                if self.gcode_program.is_none() {
+                if self.program.is_none() {
                     info!("No GCode Loaded");
                     self.mode = ControllerMode::Ask;
-                    return
+                    return;
                 }
-                self.run_gcode();
-                self.current_instruction += 1;
-                if self.current_instruction == self.gcode_program.len() {
-                    self.mode = ControllerMode::Ask;
+                match self.program.as_mut().unwrap().next() {
+                    Some(instruction) => self.run_instruction(&instruction),
+                    None => {
+                        self.mode = ControllerMode::Ask;
+                    }
                 }
             }
             ControllerMode::ScaleGCode => {
