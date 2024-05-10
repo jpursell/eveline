@@ -4,7 +4,7 @@ use log::{error, info};
 
 use crate::{
     draw::{heart_wave, spiralgraph, square, star, wave, Pattern},
-    gcode::{Axis, AxisLimit, GCodeProgram},
+    gcode::{Axis, AxisLimit, PlotterProgram},
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
     position::{Position, PositionMM, PositionStep},
@@ -50,7 +50,7 @@ pub struct Controller {
     predictor: Predictor,
     wait_count: usize,
     gcode_path: Option<PathBuf>,
-    gcode_program: Option<GCodeProgram>,
+    gcode_program: Option<PlotterProgram>,
 }
 
 impl Controller {
@@ -86,11 +86,11 @@ impl Controller {
     // TODO: implement len_lift pause
     // TODO: implement better timing info
 
-    fn load_gcode(gcode_path: &Option<PathBuf>) -> Option<GCodeProgram> {
+    fn load_gcode(gcode_path: &Option<PathBuf>) -> Option<PlotterProgram> {
         if gcode_path.is_none() {
             return None;
         }
-        let gcode_file = GCodeProgram::read_file(gcode_path.as_ref().unwrap());
+        let gcode_file = PlotterProgram::read_gcode_file(gcode_path.as_ref().unwrap());
         match gcode_file {
             Err(_) => {
                 error!("Invalid gcode program");

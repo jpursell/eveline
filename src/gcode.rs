@@ -102,12 +102,12 @@ impl AxisLimit {
 }
 
 impl TryFrom<MaybeAxisLimit> for AxisLimit {
-    type Error = ();
+    type Error = &'static str;
 
     fn try_from(value: MaybeAxisLimit) -> Result<Self, Self::Error> {
         match value.val {
             Some(val) => Ok(Self { val }),
-            None => Err(()),
+            None => Err("No value for axis limit"),
         }
     }
 }
@@ -205,53 +205,77 @@ pub enum PlotterInstruction {
     PenUp,
     PenDown,
     Comment(String),
+    NoOp,
 }
 
 impl TryFrom<GCode> for PlotterInstruction {
-    type Error = ();
+    type Error = &'static str;
 
     fn try_from(value: GCode) -> Result<Self, Self::Error> {
         match value.command {
             Some(command) => match command {
-                GCommand::Move | GCommand::FastMove => todo!(),
-                GCommand::UseMM | GCommand::AbsoluteDistance  | GCommand::AutoHoming => {
-                    match value.comment {
-                        Some(val) => Ok(PlotterInstruction::Comment(val)),
-                        None => Err(())
+                GCommand::Move | GCommand::FastMove => match value.z {
+                    Some(z_val) => {
+                        if value.x.is_some() | value.y.is_some() {
+                            Err("Did not expect a 3D move")
+                        } else if z_val < 0.0 {
+                            Err("Did not expect negative z value")
+                        } else if z_val == 0.0 {
+                            Ok(PlotterInstruction::PenDown)
+                        } else {
+                            Ok(PlotterInstruction::PenUp)
+                        }
                     }
+                    None => {
+                        if value.x.is_none() {
+                            Err("Move missing X")
+                        } else if value.y.is_none() {
+                            Err("Move missing Y")
+                        } else {
+                            Ok(PlotterInstruction::Move(PositionMM::new([
+                                value.x.unwrap(),
+                                value.y.unwrap(),
+                            ])))
+                        }
+                    }
+                },
+                GCommand::UseMM => Ok(PlotterInstruction::Comment(String::from("Use mm"))),
+                GCommand::AbsoluteDistance => Ok(PlotterInstruction::Comment(String::from(
+                    "Absolute distance",
+                ))),
+                GCommand::AutoHoming => {
+                    Ok(PlotterInstruction::Comment(String::from("Auto homing")))
                 }
-            }
-            None => {
-                match value.comment {
-                    Some(val) => Ok(PlotterInstruction::Comment(val)),
-                    None => Err(()),
-                }
-            }
+            },
+            None => match value.comment {
+                Some(val) => Ok(PlotterInstruction::Comment(val)),
+                None => Ok(PlotterInstruction::NoOp),
+            },
         }
     }
 }
 
-pub struct GCodeProgram {
-    codes: Vec<GCode>,
+pub struct PlotterProgram {
+    instructions: Vec<PlotterInstruction>,
     x_limits: AxisLimit,
     y_limits: AxisLimit,
 }
 
-impl GCodeProgram {
-    fn compute_limits(codes: &Vec<GCode>) -> Result<[AxisLimit; 2], ()> {
+impl PlotterProgram {
+    fn compute_limits(instructions: &Vec<PlotterInstruction>) -> Result<[AxisLimit; 2], &'static str> {
         let mut x_limits = MaybeAxisLimit::new();
         let mut y_limits = MaybeAxisLimit::new();
-        for code in codes.iter() {
-            code.update_limits(&mut x_limits, &mut y_limits);
+        for instruction in instructions.iter() {
+            instruction.update_limits(&mut x_limits, &mut y_limits);
         }
         let x_limits = AxisLimit::try_from(x_limits)?;
         let y_limits = AxisLimit::try_from(y_limits)?;
         Ok([x_limits, y_limits])
     }
-    fn new(codes: Vec<GCode>) -> Result<Self, ()> {
-        let [x_limits, y_limits] = GCodeProgram::compute_limits(&codes)?;
-        Ok(GCodeProgram {
-            codes,
+    fn new(instructions: Vec<PlotterInstruction>) -> Result<Self, &'static str> {
+        let [x_limits, y_limits] = PlotterProgram::compute_limits(&instructions)?;
+        Ok(PlotterProgram {
+            instructions,
             x_limits,
             y_limits,
         })
@@ -262,8 +286,8 @@ impl GCodeProgram {
             Axis::Y => &self.y_limits,
         };
         let transformer = cur_limits.transform_to(limit);
-        for code in &mut self.codes {
-            code.transform(&transformer, axis);
+        for instruction in &mut self.instructions {
+            instruction.transform(&transformer, axis);
         }
         todo!("update limits and make sure they look right");
     }
@@ -281,28 +305,14 @@ impl GCodeProgram {
         let cur_middle = (cur.val[0] + cur.val[1]) / 2.0;
         let other_middle = (other.val[0] + other.val[1]) / 2.0;
         adjust.offset = other_middle - cur_middle * scale;
-        for code in &mut self.codes {
-            code.transform(&x_transform, &Axis::X);
-            code.transform(&y_transform, &Axis::Y);
+        for instruction in &mut self.instructions {
+            instruction.transform(&x_transform, &Axis::X);
+            instruction.transform(&y_transform, &Axis::Y);
         }
         todo!("update limits and make sure they look right");
     }
-}
 
-impl Display for GCodeProgram {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "GCodeProgram: npts: {}, x_limits: {}, y_limits: {}",
-            self.codes.len(),
-            self.x_limits,
-            self.y_limits
-        )
-    }
-}
-
-impl GCodeProgram {
-    pub fn read_file(path: &Path) -> Result<GCodeProgram, ()> {
+    pub fn read_gcode_file(path: &Path) -> Result<PlotterProgram, &'static str> {
         let file = File::open(path).expect("failed to open file");
         let mut reader = BufReader::new(file);
         let mut buf = Vec::new();
@@ -312,6 +322,10 @@ impl GCodeProgram {
             let input = stream::iter(buf.into_iter().map(Result::<_, Error>::Ok));
             let mut parser = Parser::new(input);
             let mut gcode = GCode::new();
+            // keep a x/y state to fill out any potential move commands
+            // that only have one of these
+            let mut pos = [None; 2];
+            let mut pos_set = [false; 2];
             loop {
                 if let Some(res) = parser.next().await {
                     match res {
@@ -326,9 +340,13 @@ impl GCodeProgram {
                                     gcode.with_g(v);
                                 }
                                 'x' => {
+                                    pos[0] = Some(v);
+                                    pos_set[0] = true;
                                     gcode.with_x(v);
                                 }
                                 'y' => {
+                                    pos[1] = Some(v);
+                                    pos_set[1] = true;
                                     gcode.with_y(v);
                                 }
                                 'z' => {
@@ -341,8 +359,19 @@ impl GCodeProgram {
                             },
                             async_gcode::GCode::Execute => {
                                 if gcode != GCode::default() {
+                                    if pos_set[0] && !pos_set[1] {
+                                        gcode.with_y(pos[1].expect(
+                                            "Expecting to not start with a single axis move",
+                                        ))
+                                    }
+                                    if pos_set[1] && !pos_set[0] {
+                                        gcode.with_x(pos[0].expect(
+                                            "Expecting to not start with a single axis move",
+                                        ))
+                                    }
                                     codes.push(gcode);
                                     gcode = GCode::new();
+                                    pos_set = [false; 2];
                                 }
                             }
                         },
@@ -356,6 +385,28 @@ impl GCodeProgram {
                 }
             }
         });
-        GCodeProgram::new(codes)
+        let mut instructions = Vec::new();
+        for code in codes {
+            let instruction = PlotterInstruction::try_from(code)?;
+            match instruction {
+                PlotterInstruction::NoOp => {continue;}
+                _ => ()
+            }
+            instructions.push(instruction)
+        }
+        let program = PlotterProgram::new(instructions)?;
+        Ok(program)
+    }
+}
+
+impl Display for PlotterProgram {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Program: npts: {}, x_limits: {}, y_limits: {}",
+            self.instructions.len(),
+            self.x_limits,
+            self.y_limits
+        )
     }
 }
