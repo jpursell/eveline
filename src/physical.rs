@@ -1,8 +1,7 @@
 use std::fmt::Display;
 
 use crate::{
-    motor::STEP_DIVISION,
-    position::{PositionMM, PositionStep, PositionStepFloat},
+    gcode::AxisLimit, motor::STEP_DIVISION, position::{PositionMM, PositionStep, PositionStepFloat}
 };
 
 pub struct Physical {
@@ -49,7 +48,7 @@ impl Physical {
         let max_velocity = max_steps_per_second / steps_per_mm as f32;
         let x_limits = [45.0, 250.0];
         let y_limits = [70.0, 328.0];
-        let y_offset = -15.0;
+        let y_offset = 10.0;
         Physical {
             motor_pos,
             steps_per_mm,
@@ -59,6 +58,9 @@ impl Physical {
             y_limits,
             y_offset,
         }
+    }
+    pub fn adjust_paper_y_limit(&self, y_limit: &mut AxisLimit) {
+        y_limit.offset(&self.y_offset);
     }
     pub fn in_bounds(&self, position: &PositionMM) -> bool {
         let y_limits = self.y_limits.map(|x| x + self.y_offset);

@@ -200,7 +200,8 @@ impl Controller {
         println!("Paper X min,max?");
         let x_limit = Controller::get_position_from_user()?.into();
         println!("Paper Y min,max?");
-        let y_limit = Controller::get_position_from_user()?.into();
+        let mut y_limit = Controller::get_position_from_user()?.into();
+        self.physical.adjust_paper_y_limit(&mut y_limit);
         self.paper_limits = Some([x_limit, y_limit]);
         Ok(())
     }
@@ -480,13 +481,34 @@ impl Controller {
         if self.program.is_none() {
             return Err("No program loaded!");
         }
-        println!("What should the x limits be? (val,val)");
-        let x_limits: AxisLimit = Controller::get_axis_limit_from_user()?;
-        println!("What should the y limits be? (val,val)");
-        let y_limits: AxisLimit = Controller::get_axis_limit_from_user()?;
-        let prog = &mut self.program.as_mut().unwrap();
-        prog.center_keep_aspect(&x_limits, &y_limits);
-        Ok(())
+        println!("Center to paper limits? (y/n)");
+        match Controller::get_char_from_user()? {
+            'y' => {
+                match self.paper_limits.as_ref() {
+                    Some([x_limits, y_limits]) => {
+                        let prog = &mut self.program.as_mut().unwrap();
+                        prog.center_keep_aspect(&x_limits, &y_limits)?;
+                        Ok(())
+                    }
+                    None => {
+                        Err("Paper limits not set")
+                    }
+                }
+            }
+            'n' => {
+                println!("What should the x limits be? (val,val)");
+                let x_limits: AxisLimit = Controller::get_axis_limit_from_user()?;
+                println!("What should the y limits be? (val,val)");
+                let y_limits: AxisLimit = Controller::get_axis_limit_from_user()?;
+                let prog = &mut self.program.as_mut().unwrap();
+                prog.center_keep_aspect(&x_limits, &y_limits)?;
+                Ok(())
+            }
+            x => {
+                error!("got unsupported char {x}");
+                Err("Got unsupported char")
+            }
+        }
     }
     fn scale_program(&mut self) -> Result<(), &'static str> {
         if self.program.is_none() {
@@ -501,13 +523,13 @@ impl Controller {
         match reply {
             'y' => {
                 let prog = &mut self.program.as_mut().unwrap();
-                prog.scale_axis(&x_limits, &Axis::X);
-                prog.scale_axis(&y_limits, &Axis::Y);
+                prog.scale_axis(&x_limits, &Axis::X)?;
+                prog.scale_axis(&y_limits, &Axis::Y)?;
                 Ok(())
             }
             'n' => {
                 let prog = &mut self.program.as_mut().unwrap();
-                prog.scale_keep_aspect(&x_limits, &y_limits);
+                prog.scale_keep_aspect(&x_limits, &y_limits)?;
                 Ok(())
             }
 
@@ -610,10 +632,24 @@ impl Controller {
                 }
             }
             ControllerMode::ScaleProgram => {
-                self.scale_program();
+                match self.scale_program() {
+                    Ok(_) => {
+                        self.mode = ControllerMode::Ask;
+                    }
+                    Err(msg) => {
+                        error!("{msg}");
+                    }
+                }
             }
             ControllerMode::CenterProgram => {
-                self.center_program();
+                match self.center_program() {
+                    Ok(_) => {
+                        self.mode = ControllerMode::Ask;
+                    }
+                    Err(msg) => {
+                        error!("{msg}");
+                    }
+                }
             }
         }
     }

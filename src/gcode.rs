@@ -26,6 +26,18 @@ impl AxisTransformer {
         *val += self.offset;
     }
 }
+struct AxisTransposer {
+    offset: f64,
+}
+
+impl AxisTransposer {
+    fn new(offset: f64) -> Self {
+        Self { offset }
+    }
+    fn transpose(&self, val: &mut f64) {
+        *val += self.offset;
+    }
+}
 
 #[derive(Default)]
 pub struct MaybeAxisLimit {
@@ -94,6 +106,12 @@ impl AxisLimit {
         self.is_close_to(other) || self.val[0] > other.val[0] && self.val[1] < other.val[1]
     }
 
+    pub fn offset(&mut self, val: &f64) {
+        for x in &mut self.val{
+            *x += val;
+        }
+    }
+
     fn transform_to(&self, other: &AxisLimit) -> AxisTransformer {
         let cur_val = &self.val;
         let other_val = &other.val;
@@ -106,6 +124,19 @@ impl AxisLimit {
         let offset = other_val[0] - cur_val[0] * scale;
         // multiply by scale first and then add offset
         AxisTransformer::new(scale, offset)
+    }
+    fn center_to(&self, other: &AxisLimit) -> Result<AxisTransposer, &'static str> {
+        let cur_val = &self.val;
+        let other_val = &other.val;
+        let cur_scale = cur_val[1] - cur_val[0];
+        let other_scale = other_val[1] - other_val[0];
+        if cur_scale > other_scale {
+            return Err("Too large to center")
+        }
+        let cur_center = (cur_val[1] + cur_val[0]) / 2.0;
+        let other_center = (other_val[1] + other_val[0]) / 2.0;
+        let offset = other_center - cur_center;
+        Ok(AxisTransposer::new(offset))
     }
 }
 
@@ -231,7 +262,7 @@ impl PlotterInstruction {
             _ => (),
         }
     }
-    pub fn transform(&mut self, transform: &AxisTransformer, axis: &Axis) {
+    fn transform(&mut self, transform: &AxisTransformer, axis: &Axis) {
         match self {
             PlotterInstruction::Move(pos) => {
                 let inner_val: &mut f64 = match axis {
@@ -239,6 +270,18 @@ impl PlotterInstruction {
                     Axis::Y => pos.y_mut(),
                 };
                 transform.transform(inner_val);
+            }
+            _ => (),
+        }
+    }
+    fn transpose(&mut self, transposer: &AxisTransposer, axis: &Axis) {
+        match self {
+            PlotterInstruction::Move(pos) => {
+                let inner_val: &mut f64 = match axis {
+                    Axis::X => pos.x_mut(),
+                    Axis::Y => pos.y_mut(),
+                };
+                transposer.transpose(inner_val);
             }
             _ => (),
         }
@@ -266,7 +309,9 @@ impl TryFrom<GCode> for PlotterInstruction {
                     None => {
                         if value.f.is_some() && value.x.is_none() && value.y.is_none() {
                             let feed = value.f.unwrap();
-                            Ok(PlotterInstruction::Comment(String::from(format!("feed {feed}"))))
+                            Ok(PlotterInstruction::Comment(String::from(format!(
+                                "feed {feed}"
+                            ))))
                         } else if value.x.is_none() {
                             Err("Move missing X")
                         } else if value.y.is_none() {
@@ -361,7 +406,7 @@ impl PlotterProgram {
             Axis::Y => &self.y_limits,
         }
     }
-    pub fn scale_axis(&mut self, limit: &AxisLimit, axis: &Axis) {
+    pub fn scale_axis(&mut self, limit: &AxisLimit, axis: &Axis) -> Result<(), &'static str> {
         let cur_limits = self.get_limit(axis);
         let transformer = cur_limits.transform_to(limit);
         for instruction in &mut self.instructions {
@@ -370,11 +415,39 @@ impl PlotterProgram {
         self.update_limits()
             .expect("Limit calculation failed after scaling");
         let cur_limits = self.get_limit(axis);
-        assert!(cur_limits.is_close_to(limit));
+        if !cur_limits.is_close_to(limit) {
+            Err("Scale failed")
+        } else {
+            Ok(())
+        }
     }
     /// Transform code to be in center
-    pub fn center_keep_aspect(&mut self, x_limit: &AxisLimit, y_limit: &AxisLimit) {
-        todo!();
+    pub fn center_keep_aspect(
+        &mut self,
+        x_limit: &AxisLimit,
+        y_limit: &AxisLimit,
+    ) -> Result<(), &'static str> {
+        let x_transpose = self.x_limits.center_to(x_limit)?;
+        let y_transpose = self.y_limits.center_to(y_limit)?;
+        for instruction in &mut self.instructions {
+            instruction.transpose(&x_transpose, &Axis::X);
+            instruction.transpose(&y_transpose, &Axis::Y);
+        }
+        self.update_limits()?;
+        if !self.x_limits.is_inside_of(x_limit) {
+            Err("No in X bounds")
+        } else if !self.y_limits.is_inside_of(y_limit) {
+            Err("No in Y bounds")
+        } else {
+            Ok(())
+        }
+    }
+    /// Transform code to be in center
+    pub fn scale_keep_aspect(
+        &mut self,
+        x_limit: &AxisLimit,
+        y_limit: &AxisLimit,
+    ) -> Result<(), &'static str> {
         let mut x_transform = self.x_limits.transform_to(x_limit);
         let mut y_transform = self.y_limits.transform_to(y_limit);
         let scale = x_transform.scale.min(y_transform.scale);
@@ -391,33 +464,14 @@ impl PlotterProgram {
             instruction.transform(&x_transform, &Axis::X);
             instruction.transform(&y_transform, &Axis::Y);
         }
-        self.update_limits()
-            .expect("Limit calculation failed after scaling to preserve aspect");
-        assert!(self.x_limits.is_inside_of(x_limit));
-        assert!(self.y_limits.is_inside_of(y_limit));
-    }
-    /// Transform code to be in center
-    pub fn scale_keep_aspect(&mut self, x_limit: &AxisLimit, y_limit: &AxisLimit) {
-        let mut x_transform = self.x_limits.transform_to(x_limit);
-        let mut y_transform = self.y_limits.transform_to(y_limit);
-        let scale = x_transform.scale.min(y_transform.scale);
-        let (adjust, cur, other) = if x_transform.scale > y_transform.scale {
-            (&mut x_transform, &self.x_limits, &x_limit)
+        self.update_limits()?;
+        if !self.x_limits.is_inside_of(x_limit){
+            Err("Not in x")
+        } else if !self.y_limits.is_inside_of(y_limit){
+            Err("Not in Y")
         } else {
-            (&mut y_transform, &self.y_limits, &y_limit)
-        };
-        adjust.scale = scale;
-        let cur_middle = (cur.val[0] + cur.val[1]) / 2.0;
-        let other_middle = (other.val[0] + other.val[1]) / 2.0;
-        adjust.offset = other_middle - cur_middle * scale;
-        for instruction in &mut self.instructions {
-            instruction.transform(&x_transform, &Axis::X);
-            instruction.transform(&y_transform, &Axis::Y);
+            Ok(())
         }
-        self.update_limits()
-            .expect("Limit calculation failed after scaling to preserve aspect");
-        assert!(self.x_limits.is_inside_of(x_limit));
-        assert!(self.y_limits.is_inside_of(y_limit));
     }
 
     pub fn read_gcode_file(path: &Path) -> Result<PlotterProgram, &'static str> {
