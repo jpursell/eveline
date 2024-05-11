@@ -20,9 +20,8 @@ enum ControllerMode {
     QueryPaper,
     QueryPosition,
     Moving,
-    Complete,
-    InitGCode,
-    RunGCode,
+    InitProgram,
+    RunProgram,
     Spiralgraph,
     HeartWave,
     Square,
@@ -42,7 +41,7 @@ pub struct Controller {
     current_position_initialized: bool,
     motors: [Motor; 2],
     mode: ControllerMode,
-    paper_origin: PositionMM,
+    paper_limits: Option<[AxisLimit; 2]>,
     physical: Physical,
     move_status: MoveStatus,
     s_curve: SCurve,
@@ -68,7 +67,7 @@ impl Controller {
             current_position_initialized: false,
             motors,
             mode: ControllerMode::QueryPosition,
-            paper_origin: PositionMM::default(),
+            paper_limits: None,
             solver,
             physical,
             move_status: MoveStatus::Stopped,
@@ -168,7 +167,7 @@ impl Controller {
     }
 
     fn set_mode_from_user(&mut self) {
-        println!("What should we do? (M)ove, (R)un gcode, (S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave, or set (P)osition");
+        println!("What should we do? (M)ove, (R)un gcode, (S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave, set paper (L)imits, or set (P)osition");
         let first_char = Controller::get_char_from_user();
         if first_char.is_err() {
             return;
@@ -181,8 +180,9 @@ impl Controller {
             'h' => ControllerMode::HeartWave,
             'g' => ControllerMode::Spiralgraph,
             'p' => ControllerMode::QueryPosition,
-            'r' => ControllerMode::InitGCode,
+            'r' => ControllerMode::InitProgram,
             'c' => ControllerMode::ScaleGCode,
+            'l' => ControllerMode::QueryPaper,
             _ => {
                 println!("Unknown mode.");
                 ControllerMode::Ask
@@ -201,17 +201,13 @@ impl Controller {
         }
         Err(())
     }
-    fn set_paper_origin_from_user(&mut self) -> Result<(), ()> {
-        println!(
-            "What's the location of the lower left corner of the paper in mm? provide \"x,y\""
-        );
-        for _ in 0..1 {
-            if let Ok(mm) = Controller::get_position_from_user() {
-                self.paper_origin = mm;
-                return Ok(());
-            }
-        }
-        Err(())
+    fn set_paper_limits_from_user(&mut self) -> Result<(), ()> {
+        println!("Paper X min,max?");
+        let x_limit = Controller::get_position_from_user()?.into();
+        println!("Paper Y min,max?");
+        let y_limit = Controller::get_position_from_user()?.into();
+        self.paper_limits = Some([x_limit, y_limit]);
+        Ok(())
     }
     fn get_jog_from_user(&mut self) -> Result<PositionMM, ()> {
         println!("Where to? provide \"x,y\"");
@@ -305,8 +301,6 @@ impl Controller {
                 }
             }
         }
-        // self.mode = ControllerMode::Complete;
-        // return;
         let direction = [0.0, -1.0];
         let new_position: PositionMM = self.current_position.offset(&amount, &direction);
         info!(
@@ -469,10 +463,18 @@ impl Controller {
                     }
                 }
             }
-            PlotterInstruction::PenUp => todo!(),
-            PlotterInstruction::PenDown => todo!(),
-            PlotterInstruction::Comment(_) => todo!(),
-            PlotterInstruction::NoOp => todo!(),
+            PlotterInstruction::PenUp => {
+                println!("Remove pen and hit enter");
+                let _ = Controller::get_char_from_user();
+            }
+            PlotterInstruction::PenDown => {
+                println!("Insert pen and hit enter");
+                let _ = Controller::get_char_from_user();
+            }
+            PlotterInstruction::Comment(c) => {
+                info!("comment: {c}");
+            }
+            PlotterInstruction::NoOp => (),
         }
     }
 
@@ -532,12 +534,9 @@ impl Controller {
                 self.move_to();
                 self.mode = ControllerMode::Ask;
             }
-            ControllerMode::Complete => {
-                todo!()
-            }
             ControllerMode::QueryPaper => {
-                if let Ok(_) = self.set_paper_origin_from_user() {
-                    self.mode = ControllerMode::QueryPosition;
+                if let Ok(_) = self.set_paper_limits_from_user() {
+                    self.mode = ControllerMode::Ask;
                 }
             }
             ControllerMode::QueryPosition => {
@@ -571,18 +570,18 @@ impl Controller {
                 self.draw_pattern(Pattern::HeartWave);
                 self.mode = ControllerMode::Ask;
             }
-            ControllerMode::InitGCode => match self.program.as_mut() {
+            ControllerMode::InitProgram => match self.program.as_mut() {
                 Some(ref mut program) => {
                     program.reset();
-                    todo!("check gcode bounds");
-                    self.mode = ControllerMode::RunGCode;
+                    todo!("check gcode bounds is in paper limits (also make sure paper limits set)");
+                    self.mode = ControllerMode::RunProgram;
                 }
                 None => {
-                    info!("No GCode Loaded");
+                    info!("No Program Loaded");
                     self.mode = ControllerMode::Ask;
                 }
             },
-            ControllerMode::RunGCode => {
+            ControllerMode::RunProgram => {
                 if self.program.is_none() {
                     info!("No GCode Loaded");
                     self.mode = ControllerMode::Ask;
