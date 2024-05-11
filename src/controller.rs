@@ -114,17 +114,16 @@ impl Controller {
         }
         Ok(side.unwrap())
     }
-    fn get_position_from_user() -> Result<PositionMM, ()> {
+    fn get_position_from_user() -> Result<PositionMM, &'static str> {
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
-            log::error!("error: {error}");
-            return Err(());
+            error!("{error}");
+            return Err("stdin: read_line failed");
         }
         let xy = {
             let input = input.trim();
             let Some(xy_s) = input.split_once(",") else {
-                log::error!("Did not get expected format");
-                return Err(());
+                return Err("Did not get expected format");
             };
             let xy_s = [xy_s.0, xy_s.1];
             info!("got {}, {}", xy_s[0], xy_s[1]);
@@ -133,8 +132,8 @@ impl Controller {
                 if let Ok(pf) = s.parse::<f64>() {
                     *f = pf;
                 } else {
-                    log::error!("Failed to parse \"{}\"", s);
-                    return Err(());
+                    error!("Failed to parse \"{}\"", s);
+                    return Err("Failed to parse");
                 }
             }
             xy_f
@@ -142,22 +141,21 @@ impl Controller {
         Ok(PositionMM::new(xy))
     }
 
-    fn get_char_from_user() -> Result<char, ()> {
+    fn get_char_from_user() -> Result<char, &'static str> {
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             log::error!("error: {error}");
-            return Err(());
+            return Err("read line error");
         }
 
         let input = input.trim();
         let first_char = input.chars().next();
         if first_char.is_none() {
-            println!("Nothing entered");
-            return Err(());
+            return Err("Nothing entered");
         }
         let first_char = first_char.unwrap().to_lowercase().next();
         if first_char.is_none() {
-            return Err(());
+            return Err("Nothing entered for first char");
         }
         Ok(first_char.unwrap())
     }
@@ -198,7 +196,7 @@ impl Controller {
         }
         Err(())
     }
-    fn set_paper_limits_from_user(&mut self) -> Result<(), ()> {
+    fn set_paper_limits_from_user(&mut self) -> Result<(), &'static str> {
         println!("Paper X min,max?");
         let x_limit = Controller::get_position_from_user()?.into();
         println!("Paper Y min,max?");
@@ -475,81 +473,47 @@ impl Controller {
         }
     }
 
-    fn get_axis_limit_from_user() -> Result<AxisLimit, ()> {
+    fn get_axis_limit_from_user() -> Result<AxisLimit, &'static str> {
         Controller::get_position_from_user().map(|p| AxisLimit::from(p))
     }
-    fn center_program(&mut self) {
-        todo!("Fix this");
+    fn center_program(&mut self) -> Result<(), &'static str> {
         if self.program.is_none() {
-            println!("No program loaded!");
-            return;
+            return Err("No program loaded!");
         }
         println!("What should the x limits be? (val,val)");
-        let x_limits: Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
-        if x_limits.is_err() {
-            return;
-        }
+        let x_limits: AxisLimit = Controller::get_axis_limit_from_user()?;
         println!("What should the y limits be? (val,val)");
-        let y_limits: Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
-        if y_limits.is_err() {
-            return;
-        }
-        println!("Preserve aspect Ratio? (y,n)");
-        let reply = Controller::get_char_from_user();
-        if reply.is_err() {
-            return;
-        }
-        match reply.unwrap() {
-            'y' => {
-                let prog = &mut self.program.as_mut().unwrap();
-                prog.scale_axis(&x_limits.unwrap(), &Axis::X);
-                prog.scale_axis(&y_limits.unwrap(), &Axis::Y);
-            }
-            'n' => {
-                let prog = &mut self.program.as_mut().unwrap();
-                prog.scale_keep_aspect(&x_limits.unwrap(), &y_limits.unwrap());
-            }
-
-            x => {
-                error!("got {x}");
-                return;
-            }
-        }
+        let y_limits: AxisLimit = Controller::get_axis_limit_from_user()?;
+        let prog = &mut self.program.as_mut().unwrap();
+        prog.center_keep_aspect(&x_limits, &y_limits);
+        Ok(())
     }
-    fn scale_program(&mut self) {
+    fn scale_program(&mut self) -> Result<(), &'static str> {
         if self.program.is_none() {
-            println!("No program loaded!");
-            return;
+            return Err("No program loaded!");
         }
         println!("What should the x limits be? (val,val)");
-        let x_limits: Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
-        if x_limits.is_err() {
-            return;
-        }
+        let x_limits: AxisLimit = Controller::get_axis_limit_from_user()?;
         println!("What should the y limits be? (val,val)");
-        let y_limits: Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
-        if y_limits.is_err() {
-            return;
-        }
+        let y_limits: AxisLimit = Controller::get_axis_limit_from_user()?;
         println!("Preserve aspect Ratio? (y,n)");
-        let reply = Controller::get_char_from_user();
-        if reply.is_err() {
-            return;
-        }
-        match reply.unwrap() {
+        let reply = Controller::get_char_from_user()?;
+        match reply {
             'y' => {
                 let prog = &mut self.program.as_mut().unwrap();
-                prog.scale_axis(&x_limits.unwrap(), &Axis::X);
-                prog.scale_axis(&y_limits.unwrap(), &Axis::Y);
+                prog.scale_axis(&x_limits, &Axis::X);
+                prog.scale_axis(&y_limits, &Axis::Y);
+                Ok(())
             }
             'n' => {
                 let prog = &mut self.program.as_mut().unwrap();
-                prog.scale_keep_aspect(&x_limits.unwrap(), &y_limits.unwrap());
+                prog.scale_keep_aspect(&x_limits, &y_limits);
+                Ok(())
             }
 
             x => {
                 error!("got {x}");
-                return;
+                Err("got unexpected char")
             }
         }
     }

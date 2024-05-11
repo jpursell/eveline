@@ -373,6 +373,30 @@ impl PlotterProgram {
         assert!(cur_limits.is_close_to(limit));
     }
     /// Transform code to be in center
+    pub fn center_keep_aspect(&mut self, x_limit: &AxisLimit, y_limit: &AxisLimit) {
+        todo!();
+        let mut x_transform = self.x_limits.transform_to(x_limit);
+        let mut y_transform = self.y_limits.transform_to(y_limit);
+        let scale = x_transform.scale.min(y_transform.scale);
+        let (adjust, cur, other) = if x_transform.scale > y_transform.scale {
+            (&mut x_transform, &self.x_limits, &x_limit)
+        } else {
+            (&mut y_transform, &self.y_limits, &y_limit)
+        };
+        adjust.scale = scale;
+        let cur_middle = (cur.val[0] + cur.val[1]) / 2.0;
+        let other_middle = (other.val[0] + other.val[1]) / 2.0;
+        adjust.offset = other_middle - cur_middle * scale;
+        for instruction in &mut self.instructions {
+            instruction.transform(&x_transform, &Axis::X);
+            instruction.transform(&y_transform, &Axis::Y);
+        }
+        self.update_limits()
+            .expect("Limit calculation failed after scaling to preserve aspect");
+        assert!(self.x_limits.is_inside_of(x_limit));
+        assert!(self.y_limits.is_inside_of(y_limit));
+    }
+    /// Transform code to be in center
     pub fn scale_keep_aspect(&mut self, x_limit: &AxisLimit, y_limit: &AxisLimit) {
         let mut x_transform = self.x_limits.transform_to(x_limit);
         let mut y_transform = self.y_limits.transform_to(y_limit);
