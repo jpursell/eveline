@@ -82,8 +82,16 @@ pub struct AxisLimit {
 }
 
 impl AxisLimit {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(val: [f64; 2]) -> Self {
+        AxisLimit { val }
+    }
+
+    pub fn is_close_to(&self, other: &AxisLimit) -> bool {
+        is_close::default().all_close(self.val, other.val)
+    }
+
+    pub fn is_inside_of(&self, other: &AxisLimit) -> bool {
+        self.is_close_to(other) || self.val[0] > other.val[0] && self.val[1] < other.val[1]
     }
 
     fn transform_to(&self, other: &AxisLimit) -> AxisTransformer {
@@ -313,6 +321,12 @@ impl PlotterProgram {
         let y_limits = AxisLimit::try_from(y_limits)?;
         Ok([x_limits, y_limits])
     }
+    fn update_limits(&mut self) -> Result<(), &'static str> {
+        let [xlim, ylim] = PlotterProgram::compute_limits(&self.instructions)?;
+        self.x_limits = xlim;
+        self.y_limits = ylim;
+        Ok(())
+    }
     fn new(instructions: Vec<PlotterInstruction>) -> Result<Self, &'static str> {
         let [x_limits, y_limits] = PlotterProgram::compute_limits(&instructions)?;
         Ok(PlotterProgram {
@@ -331,16 +345,22 @@ impl PlotterProgram {
     pub fn current_position(&self) -> usize {
         self.current_position
     }
-    pub fn scale_axis(&mut self, limit: &AxisLimit, axis: &Axis) {
-        let cur_limits = match axis {
+    fn get_limit(&self, axis: &Axis) -> &AxisLimit {
+        match axis {
             Axis::X => &self.x_limits,
             Axis::Y => &self.y_limits,
-        };
+        }
+    }
+    pub fn scale_axis(&mut self, limit: &AxisLimit, axis: &Axis) {
+        let cur_limits = self.get_limit(axis);
         let transformer = cur_limits.transform_to(limit);
         for instruction in &mut self.instructions {
             instruction.transform(&transformer, axis);
         }
-        todo!("update limits and make sure they look right");
+        self.update_limits()
+            .expect("Limit calculation failed after scaling");
+        let cur_limits = self.get_limit(axis);
+        assert!(cur_limits.is_close_to(limit));
     }
     /// Transform code to be in center
     pub fn scale_keep_aspect(&mut self, x_limit: &AxisLimit, y_limit: &AxisLimit) {
@@ -360,7 +380,10 @@ impl PlotterProgram {
             instruction.transform(&x_transform, &Axis::X);
             instruction.transform(&y_transform, &Axis::Y);
         }
-        todo!("update limits and make sure they look right");
+        self.update_limits()
+            .expect("Limit calculation failed after scaling to preserve aspect");
+        assert!(self.x_limits.is_inside_of(x_limit));
+        assert!(self.y_limits.is_inside_of(y_limit));
     }
 
     pub fn read_gcode_file(path: &Path) -> Result<PlotterProgram, &'static str> {
