@@ -150,6 +150,7 @@ struct GCode {
     x: Option<f64>,
     y: Option<f64>,
     z: Option<f64>,
+    f: Option<f64>,
     comment: Option<String>,
 }
 
@@ -189,6 +190,9 @@ impl GCode {
     }
     fn with_z(&mut self, val: f64) {
         self.z = Some(val);
+    }
+    fn with_f(&mut self, val: f64) {
+        self.f = Some(val);
     }
     fn with_comment(&mut self, val: String) {
         self.comment = Some(val);
@@ -260,7 +264,10 @@ impl TryFrom<GCode> for PlotterInstruction {
                         }
                     }
                     None => {
-                        if value.x.is_none() {
+                        if value.f.is_some() && value.x.is_none() && value.y.is_none() {
+                            let feed = value.f.unwrap();
+                            Ok(PlotterInstruction::Comment(String::from(format!("feed {feed}"))))
+                        } else if value.x.is_none() {
                             Err("Move missing X")
                         } else if value.y.is_none() {
                             Err("Move missing Y")
@@ -335,6 +342,9 @@ impl PlotterProgram {
             y_limits,
             current_position: 0,
         })
+    }
+    pub fn within_limits(&self, limits: &[AxisLimit; 2]) -> bool {
+        self.x_limits.is_inside_of(&limits[0]) && self.y_limits.is_inside_of(&limits[1])
     }
     pub fn reset(&mut self) {
         self.current_position = 0;
@@ -426,7 +436,9 @@ impl PlotterProgram {
                                 'z' => {
                                     gcode.with_z(v);
                                 }
-                                'f' => (),
+                                'f' => {
+                                    gcode.with_f(v);
+                                }
                                 _ => {
                                     panic!("got {c}");
                                 }
@@ -447,6 +459,9 @@ impl PlotterProgram {
                                     gcode = GCode::new();
                                     pos_set = [false; 2];
                                 }
+                            }
+                            async_gcode::GCode::Comment(msg) => {
+                                gcode.with_comment(msg);
                             }
                         },
                         Err(e) => {

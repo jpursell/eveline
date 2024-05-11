@@ -27,7 +27,8 @@ enum ControllerMode {
     Square,
     Star,
     Wave,
-    ScaleGCode,
+    ScaleProgram,
+    CenterProgram,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -48,7 +49,6 @@ pub struct Controller {
     solver: SCurveSolver,
     predictor: Predictor,
     wait_count: usize,
-    gcode_path: Option<PathBuf>,
     program: Option<PlotterProgram>,
 }
 
@@ -74,15 +74,10 @@ impl Controller {
             s_curve: SCurve::default(),
             predictor: Predictor::default(),
             wait_count: 0,
-            gcode_path,
             program: gcode_program,
         }
     }
 
-    // TODO: implement set_gcode_start_point
-    // TODO: implement draw_gcode_instruction
-    // TODO: change run_gcode to use draw_code_instruction and move to next until end
-    // TODO: implement len_lift pause
     // TODO: implement better timing info
 
     fn load_gcode(gcode_path: &Option<PathBuf>) -> Option<PlotterProgram> {
@@ -91,7 +86,8 @@ impl Controller {
         }
         let gcode_file = PlotterProgram::read_gcode_file(gcode_path.as_ref().unwrap());
         match gcode_file {
-            Err(_) => {
+            Err(msg) => {
+                error!("{msg}");
                 error!("Invalid gcode program");
                 None
             }
@@ -167,7 +163,7 @@ impl Controller {
     }
 
     fn set_mode_from_user(&mut self) {
-        println!("What should we do? (M)ove, (R)un gcode, (S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave, set paper (L)imits, or set (P)osition");
+        println!("What should we do? (M)ove, (C)enter program, sc(A)le program, (R)un gcode, (S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave, set paper (L)imits, or set (P)osition");
         let first_char = Controller::get_char_from_user();
         if first_char.is_err() {
             return;
@@ -181,7 +177,8 @@ impl Controller {
             'g' => ControllerMode::Spiralgraph,
             'p' => ControllerMode::QueryPosition,
             'r' => ControllerMode::InitProgram,
-            'c' => ControllerMode::ScaleGCode,
+            'c' => ControllerMode::CenterProgram,
+            'a' => ControllerMode::ScaleProgram,
             'l' => ControllerMode::QueryPaper,
             _ => {
                 println!("Unknown mode.");
@@ -481,7 +478,45 @@ impl Controller {
     fn get_axis_limit_from_user() -> Result<AxisLimit, ()> {
         Controller::get_position_from_user().map(|p| AxisLimit::from(p))
     }
-    fn scale_gcode(&mut self) {
+    fn center_program(&mut self) {
+        todo!("Fix this");
+        if self.program.is_none() {
+            println!("No program loaded!");
+            return;
+        }
+        println!("What should the x limits be? (val,val)");
+        let x_limits: Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
+        if x_limits.is_err() {
+            return;
+        }
+        println!("What should the y limits be? (val,val)");
+        let y_limits: Result<AxisLimit, ()> = Controller::get_axis_limit_from_user();
+        if y_limits.is_err() {
+            return;
+        }
+        println!("Preserve aspect Ratio? (y,n)");
+        let reply = Controller::get_char_from_user();
+        if reply.is_err() {
+            return;
+        }
+        match reply.unwrap() {
+            'y' => {
+                let prog = &mut self.program.as_mut().unwrap();
+                prog.scale_axis(&x_limits.unwrap(), &Axis::X);
+                prog.scale_axis(&y_limits.unwrap(), &Axis::Y);
+            }
+            'n' => {
+                let prog = &mut self.program.as_mut().unwrap();
+                prog.scale_keep_aspect(&x_limits.unwrap(), &y_limits.unwrap());
+            }
+
+            x => {
+                error!("got {x}");
+                return;
+            }
+        }
+    }
+    fn scale_program(&mut self) {
         if self.program.is_none() {
             println!("No program loaded!");
             return;
@@ -520,19 +555,20 @@ impl Controller {
     }
 
     pub fn init_program(&mut self) -> Result<(), &'static str> {
-        match self.paper_limits {
-            Some(_) => todo!(),
-            None => todo!(),
-        }
         match self.program.as_mut() {
             Some(ref mut program) => {
+                match &self.paper_limits {
+                    Some(paper_limits) => {
+                        if !program.within_limits(&paper_limits) {
+                            return Err("Program not within paper limits");
+                        }
+                    }
+                    None => return Err("Set paper limits first"),
+                }
                 program.reset();
-                todo!("check gcode bounds is in paper limits (also make sure paper limits set)");
                 Ok(())
             }
-            None => {
-                Err((("No Program Loaded"))
-            }
+            None => Err("No Program Loaded"),
         }
     }
 
@@ -587,17 +623,15 @@ impl Controller {
                 self.draw_pattern(Pattern::HeartWave);
                 self.mode = ControllerMode::Ask;
             }
-            ControllerMode::InitProgram => {
-                match self.init_program() {
-                    Ok(_) => {
-                        self.mode = ControllerMode::RunProgram;
-                    }
-                    Err(msg) => {
-                        error!(msg);
-                        self.mode = ControllerMode::Ask;
-                    }
+            ControllerMode::InitProgram => match self.init_program() {
+                Ok(_) => {
+                    self.mode = ControllerMode::RunProgram;
                 }
-            }
+                Err(msg) => {
+                    error!("{msg}");
+                    self.mode = ControllerMode::Ask;
+                }
+            },
             ControllerMode::RunProgram => {
                 if self.program.is_none() {
                     info!("No GCode Loaded");
@@ -611,8 +645,11 @@ impl Controller {
                     }
                 }
             }
-            ControllerMode::ScaleGCode => {
-                self.scale_gcode();
+            ControllerMode::ScaleProgram => {
+                self.scale_program();
+            }
+            ControllerMode::CenterProgram => {
+                self.center_program();
             }
         }
     }
