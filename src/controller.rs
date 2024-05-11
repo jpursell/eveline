@@ -519,6 +519,23 @@ impl Controller {
         }
     }
 
+    pub fn init_program(&mut self) -> Result<(), &'static str> {
+        match self.paper_limits {
+            Some(_) => todo!(),
+            None => todo!(),
+        }
+        match self.program.as_mut() {
+            Some(ref mut program) => {
+                program.reset();
+                todo!("check gcode bounds is in paper limits (also make sure paper limits set)");
+                Ok(())
+            }
+            None => {
+                Err((("No Program Loaded"))
+            }
+        }
+    }
+
     pub fn update(&mut self) {
         match self.mode {
             ControllerMode::Ask => {
@@ -570,17 +587,17 @@ impl Controller {
                 self.draw_pattern(Pattern::HeartWave);
                 self.mode = ControllerMode::Ask;
             }
-            ControllerMode::InitProgram => match self.program.as_mut() {
-                Some(ref mut program) => {
-                    program.reset();
-                    todo!("check gcode bounds is in paper limits (also make sure paper limits set)");
-                    self.mode = ControllerMode::RunProgram;
+            ControllerMode::InitProgram => {
+                match self.init_program() {
+                    Ok(_) => {
+                        self.mode = ControllerMode::RunProgram;
+                    }
+                    Err(msg) => {
+                        error!(msg);
+                        self.mode = ControllerMode::Ask;
+                    }
                 }
-                None => {
-                    info!("No Program Loaded");
-                    self.mode = ControllerMode::Ask;
-                }
-            },
+            }
             ControllerMode::RunProgram => {
                 if self.program.is_none() {
                     info!("No GCode Loaded");
