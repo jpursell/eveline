@@ -1,7 +1,9 @@
 use std::fmt::Display;
 
 use crate::{
-    gcode::AxisLimit, motor::STEP_DIVISION, position::{PositionMM, PositionStep, PositionStepFloat}
+    gcode::AxisLimit,
+    motor::STEP_DIVISION,
+    position::{PositionMM, PositionStep, PositionStepFloat},
 };
 
 pub struct Physical {
@@ -88,5 +90,11 @@ impl Physical {
     }
     pub fn step_to_mm(&self, step: &usize) -> f64 {
         *step as f64 * self.mm_per_step
+    }
+}
+
+impl Default for Physical {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -193,7 +193,7 @@ impl SCurve {
         p[6] = p[5] + v[5] * t_j0 + a_j4 * t_j0.powi(2) / 2.0 + solver.m_j * t_j0.powi(3) / 6.0;
         let dir = start.get_direction(&end);
         SCurve {
-            start: start,
+            start,
             t_start: Instant::now(),
             t,
             a_j0,

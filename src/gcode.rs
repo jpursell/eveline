@@ -107,7 +107,7 @@ impl AxisLimit {
     }
 
     pub fn offset(&mut self, val: &f64) {
-        for x in &mut self.val{
+        for x in &mut self.val {
             *x += val;
         }
     }
@@ -131,7 +131,7 @@ impl AxisLimit {
         let cur_scale = cur_val[1] - cur_val[0];
         let other_scale = other_val[1] - other_val[0];
         if cur_scale > other_scale {
-            return Err("Too large to center")
+            return Err("Too large to center");
         }
         let cur_center = (cur_val[1] + cur_val[0]) / 2.0;
         let other_center = (other_val[1] + other_val[0]) / 2.0;
@@ -189,18 +189,6 @@ impl GCode {
     fn new() -> Self {
         Self::default()
     }
-    pub fn transform(&mut self, transform: &AxisTransformer, axis: &Axis) {
-        let val = match axis {
-            Axis::X => &mut self.x,
-            Axis::Y => &mut self.y,
-        };
-        match val {
-            Some(inner_val) => {
-                transform.transform(inner_val);
-            }
-            None => (),
-        }
-    }
     fn with_g(&mut self, val: f64) {
         self.command = match val {
             0.0 => Some(GCommand::FastMove),
@@ -228,14 +216,6 @@ impl GCode {
     fn with_comment(&mut self, val: String) {
         self.comment = Some(val);
     }
-    fn update_limits(&self, x_limits: &mut MaybeAxisLimit, y_limits: &mut MaybeAxisLimit) {
-        if self.x.is_some() {
-            x_limits.update(&self.x.unwrap());
-        }
-        if self.y.is_some() {
-            y_limits.update(&self.y.unwrap());
-        }
-    }
 }
 
 pub enum Axis {
@@ -254,36 +234,27 @@ pub enum PlotterInstruction {
 
 impl PlotterInstruction {
     fn update_limits(&self, x_limits: &mut MaybeAxisLimit, y_limits: &mut MaybeAxisLimit) {
-        match self {
-            PlotterInstruction::Move(pos) => {
-                x_limits.update(pos.x());
-                y_limits.update(pos.y());
-            }
-            _ => (),
+        if let PlotterInstruction::Move(pos) = self {
+            x_limits.update(pos.x());
+            y_limits.update(pos.y());
         }
     }
     fn transform(&mut self, transform: &AxisTransformer, axis: &Axis) {
-        match self {
-            PlotterInstruction::Move(pos) => {
-                let inner_val: &mut f64 = match axis {
-                    Axis::X => pos.x_mut(),
-                    Axis::Y => pos.y_mut(),
-                };
-                transform.transform(inner_val);
-            }
-            _ => (),
+        if let PlotterInstruction::Move(pos) = self {
+            let inner_val: &mut f64 = match axis {
+                Axis::X => pos.x_mut(),
+                Axis::Y => pos.y_mut(),
+            };
+            transform.transform(inner_val);
         }
     }
     fn transpose(&mut self, transposer: &AxisTransposer, axis: &Axis) {
-        match self {
-            PlotterInstruction::Move(pos) => {
-                let inner_val: &mut f64 = match axis {
-                    Axis::X => pos.x_mut(),
-                    Axis::Y => pos.y_mut(),
-                };
-                transposer.transpose(inner_val);
-            }
-            _ => (),
+        if let PlotterInstruction::Move(pos) = self {
+            let inner_val: &mut f64 = match axis {
+                Axis::X => pos.x_mut(),
+                Axis::Y => pos.y_mut(),
+            };
+            transposer.transpose(inner_val);
         }
     }
 }
@@ -309,9 +280,7 @@ impl TryFrom<GCode> for PlotterInstruction {
                     None => {
                         if value.f.is_some() && value.x.is_none() && value.y.is_none() {
                             let feed = value.f.unwrap();
-                            Ok(PlotterInstruction::Comment(String::from(format!(
-                                "feed {feed}"
-                            ))))
+                            Ok(PlotterInstruction::Comment(format!("feed {feed}")))
                         } else if value.x.is_none() {
                             Err("Move missing X")
                         } else if value.y.is_none() {
@@ -361,9 +330,7 @@ impl Iterator for PlotterProgram {
 }
 
 impl PlotterProgram {
-    fn compute_limits(
-        instructions: &Vec<PlotterInstruction>,
-    ) -> Result<[AxisLimit; 2], &'static str> {
+    fn compute_limits(instructions: &[PlotterInstruction]) -> Result<[AxisLimit; 2], &'static str> {
         let mut x_limits = MaybeAxisLimit::new();
         let mut y_limits = MaybeAxisLimit::new();
         for instruction in instructions.iter() {
@@ -379,7 +346,7 @@ impl PlotterProgram {
         self.y_limits = ylim;
         Ok(())
     }
-    fn new(instructions: Vec<PlotterInstruction>) -> Result<Self, &'static str> {
+    pub fn new(instructions: Vec<PlotterInstruction>) -> Result<Self, &'static str> {
         let [x_limits, y_limits] = PlotterProgram::compute_limits(&instructions)?;
         Ok(PlotterProgram {
             instructions,
@@ -388,6 +355,25 @@ impl PlotterProgram {
             current_position: 0,
         })
     }
+
+    pub fn from_positions(
+        start: &PositionMM,
+        positions: Vec<PositionMM>,
+    ) -> Result<PlotterProgram, &'static str> {
+        let mut instructions = vec![
+            PlotterInstruction::PenUp,
+            PlotterInstruction::Move(*start),
+            PlotterInstruction::PenDown,
+        ];
+        let mut positions: Vec<PlotterInstruction> = positions
+            .into_iter()
+            .map(PlotterInstruction::Move)
+            .collect();
+        instructions.append(&mut positions);
+        instructions.push(PlotterInstruction::PenUp);
+        PlotterProgram::new(instructions)
+    }
+
     pub fn within_limits(&self, limits: &[AxisLimit; 2]) -> bool {
         self.x_limits.is_inside_of(&limits[0]) && self.y_limits.is_inside_of(&limits[1])
     }
@@ -465,9 +451,9 @@ impl PlotterProgram {
             instruction.transform(&y_transform, &Axis::Y);
         }
         self.update_limits()?;
-        if !self.x_limits.is_inside_of(x_limit){
+        if !self.x_limits.is_inside_of(x_limit) {
             Err("Not in x")
-        } else if !self.y_limits.is_inside_of(y_limit){
+        } else if !self.y_limits.is_inside_of(y_limit) {
             Err("Not in Y")
         } else {
             Ok(())
@@ -488,10 +474,10 @@ impl PlotterProgram {
             // that only have one of these
             let mut pos = [None; 2];
             let mut pos_set = [false; 2];
-            loop {
-                if let Some(res) = parser.next().await {
-                    match res {
-                        Ok(gc) => match gc {
+            while let Some(res) = parser.next().await {
+                match res {
+                    Ok(gc) => {
+                        match gc {
                             async_gcode::GCode::BlockDelete => todo!(),
                             async_gcode::GCode::LineNumber(_) => todo!(),
                             async_gcode::GCode::Word(
@@ -541,25 +527,20 @@ impl PlotterProgram {
                             async_gcode::GCode::Comment(msg) => {
                                 gcode.with_comment(msg);
                             }
-                        },
-                        Err(e) => {
-                            log::error!("Got error: {e:?}");
-                            continue;
                         }
                     }
-                } else {
-                    break;
+                    Err(e) => {
+                        log::error!("Got error: {e:?}");
+                        continue;
+                    }
                 }
             }
         });
         let mut instructions = Vec::new();
         for code in codes {
             let instruction = PlotterInstruction::try_from(code)?;
-            match instruction {
-                PlotterInstruction::NoOp => {
-                    continue;
-                }
-                _ => (),
+            if let PlotterInstruction::NoOp = instruction {
+                continue;
             }
             instructions.push(instruction)
         }

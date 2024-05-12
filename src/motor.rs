@@ -137,7 +137,11 @@ impl Motor {
         // c%4        [ 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]
         let main_pin = self.current / STEP_DIVISION;
         let secondary_pin = (main_pin + 1) % self.pins.len();
-        let phase = self.current % STEP_DIVISION;
+        let phase = if STEP_DIVISION == 1 {
+            0
+        } else {
+            self.current % STEP_DIVISION
+        };
         let (on_pin, pwm_pin, duty_cycle) = if phase < STEP_DIVISION / 2 {
             let on_pin = main_pin;
             let pwm_pin = secondary_pin;

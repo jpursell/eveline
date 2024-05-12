@@ -1,9 +1,9 @@
-use std::{io, path::PathBuf, thread, time::Duration};
+use std::{io, path::PathBuf};
 
 use log::{error, info};
 
 use crate::{
-    draw::{heart_wave, spiralgraph, square, star, wave, Pattern},
+    draw::{heart_wave, spiralgraph, square, star, wave},
     gcode::{Axis, AxisLimit, PlotterInstruction, PlotterProgram},
     motor::{Motor, Side, StepInstruction},
     physical::Physical,
@@ -14,19 +14,12 @@ use crate::{
 
 enum ControllerMode {
     Ask,
-    Step,
-    SmallMove,
     MoveTo,
     QueryPaper,
     QueryPosition,
-    Moving,
     InitProgram,
     RunProgram,
-    Spiralgraph,
-    HeartWave,
-    Square,
-    Star,
-    Wave,
+    LoadPattern,
     ScaleProgram,
     CenterProgram,
 }
@@ -54,7 +47,7 @@ pub struct Controller {
 
 impl Controller {
     pub fn new(gcode_path: Option<PathBuf>) -> Controller {
-        let motors = [Side::Left, Side::Right].map(|s| Motor::new(s));
+        let motors = [Side::Left, Side::Right].map(Motor::new);
         let physical = Physical::new();
         info!("Physical: {physical}");
         let max_acceleration = 1e4;
@@ -99,18 +92,17 @@ impl Controller {
         }
     }
 
-    fn get_scalar_from_user() -> Result<f64, ()> {
+    fn get_scalar_from_user() -> Result<f64, &'static str> {
         let mut input = String::new();
         if let Err(error) = io::stdin().read_line(&mut input) {
             log::error!("error: {error}");
-            return Err(());
+            return Err("Failed to read from standard in");
         }
 
         let input = input.trim();
         let side = input.parse::<f64>();
         if side.is_err() {
-            log::error!("Could not parse");
-            return Err(());
+            return Err("Could not parse");
         }
         Ok(side.unwrap())
     }
@@ -122,7 +114,7 @@ impl Controller {
         }
         let xy = {
             let input = input.trim();
-            let Some(xy_s) = input.split_once(",") else {
+            let Some(xy_s) = input.split_once(',') else {
                 return Err("Did not get expected format");
             };
             let xy_s = [xy_s.0, xy_s.1];
@@ -161,18 +153,14 @@ impl Controller {
     }
 
     fn set_mode_from_user(&mut self) {
-        println!("What should we do? (M)ove, (C)enter program, sc(A)le program, (R)un gcode, (S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave, set paper (L)imits, or set (P)osition");
+        println!("What should we do? (M)ove, (C)enter program, sc(A)le program, (R)un gcode, l(O)ad pattern, set paper (L)imits, or set (P)osition");
         let first_char = Controller::get_char_from_user();
         if first_char.is_err() {
             return;
         }
         self.mode = match first_char.unwrap() {
             'm' => ControllerMode::MoveTo,
-            's' => ControllerMode::Square,
-            't' => ControllerMode::Star,
-            'w' => ControllerMode::Wave,
-            'h' => ControllerMode::HeartWave,
-            'g' => ControllerMode::Spiralgraph,
+            'o' => ControllerMode::LoadPattern,
             'p' => ControllerMode::QueryPosition,
             'r' => ControllerMode::InitProgram,
             'c' => ControllerMode::CenterProgram,
@@ -184,17 +172,13 @@ impl Controller {
             }
         };
     }
-    fn set_current_position_from_user(&mut self) -> Result<(), ()> {
+    fn set_current_position_from_user(&mut self) -> Result<(), &'static str> {
         println!("What's the current position in mm? provide \"x,y\"");
-        for _ in 0..1 {
-            if let Ok(mm) = Controller::get_position_from_user() {
-                self.current_position = Position::from_mm(mm, &self.physical);
-                self.current_position_initialized = true;
-                info!("position set to {}", self.current_position);
-                return Ok(());
-            }
-        }
-        Err(())
+        let mm = Controller::get_position_from_user()?;
+        self.current_position = Position::from_mm(mm, &self.physical);
+        self.current_position_initialized = true;
+        info!("position set to {}", self.current_position);
+        Ok(())
     }
     fn set_paper_limits_from_user(&mut self) -> Result<(), &'static str> {
         println!("Paper X min,max?");
@@ -259,62 +243,6 @@ impl Controller {
         self.current_position = Position::from_step(step, &self.physical);
         // info!("new position {}", self.current_position);
     }
-    fn step(&mut self) {
-        if !self.current_position_initialized {
-            let _ = self.set_current_position_from_user();
-            return;
-        }
-        println!("move L/H. current {}", self.current_position);
-        for _ in 0..1000 {
-            self.implement_step_instructions([StepInstruction::Hold, StepInstruction::StepShorter]);
-            thread::sleep(Duration::from_secs_f64(0.005));
-        }
-        thread::sleep(Duration::from_secs_f64(1.0));
-        println!("move S/H. current {}", self.current_position);
-        for _ in 0..1000 {
-            self.implement_step_instructions([StepInstruction::Hold, StepInstruction::StepLonger]);
-            thread::sleep(Duration::from_secs_f64(0.005));
-        }
-        thread::sleep(Duration::from_secs_f64(2.0));
-    }
-    fn small_move(&mut self) {
-        if !self.current_position_initialized {
-            let _ = self.set_current_position_from_user();
-            return;
-        }
-        let amount = 32.0;
-        let direction = [0.0, 1.0];
-        let new_position: PositionMM = self.current_position.offset(&amount, &direction);
-        info!("move from {} to {}", self.current_position, new_position);
-        self.init_move(&new_position);
-        loop {
-            match self.move_status {
-                MoveStatus::Stopped => {
-                    break;
-                }
-                MoveStatus::Moving => {
-                    self.update_move();
-                }
-            }
-        }
-        let direction = [0.0, -1.0];
-        let new_position: PositionMM = self.current_position.offset(&amount, &direction);
-        info!(
-            "move back to {} from {}",
-            new_position, self.current_position
-        );
-        self.init_move(&new_position);
-        loop {
-            match self.move_status {
-                MoveStatus::Stopped => {
-                    break;
-                }
-                MoveStatus::Moving => {
-                    self.update_move();
-                }
-            }
-        }
-    }
     fn move_to(&mut self) {
         if !self.current_position_initialized {
             let _ = self.set_current_position_from_user();
@@ -339,115 +267,69 @@ impl Controller {
         }
     }
 
-    fn create_square_pattern(&self) -> Result<Vec<PositionMM>, ()> {
+    fn create_square_pattern(&self) -> Result<PlotterProgram, &'static str> {
         println!("How long should square sides be?");
-        let square_side_length = Controller::get_scalar_from_user();
-        if square_side_length.is_err() {
-            return Err(());
-        }
-        let coords = square(&self.current_position.into(), &square_side_length.unwrap());
-        Ok(coords)
+        let square_side_length = Controller::get_scalar_from_user()?;
+        square(&self.current_position.into(), &square_side_length)
     }
 
-    fn create_star_pattern(&self) -> Result<Vec<PositionMM>, ()> {
+    fn create_star_pattern(&self) -> Result<PlotterProgram, &'static str> {
         println!("How long should star lines be?");
-        let size = Controller::get_scalar_from_user();
-        if size.is_err() {
-            return Err(());
-        }
-        let coords = star(&self.current_position.into(), &size.unwrap());
-        Ok(coords)
+        let size = Controller::get_scalar_from_user()?;
+        star(&self.current_position.into(), &size)
     }
 
-    fn create_wave_pattern(&self) -> Result<Vec<PositionMM>, ()> {
+    fn create_wave_pattern(&self) -> Result<PlotterProgram, &'static str> {
         println!("Spacing?");
-        let spacing = Controller::get_scalar_from_user();
-        if spacing.is_err() {
-            return Err(());
-        }
+        let spacing = Controller::get_scalar_from_user()?;
         println!("Length?");
-        let length = Controller::get_scalar_from_user();
-        if length.is_err() {
-            return Err(());
-        }
+        let length = Controller::get_scalar_from_user()?;
         println!("Amplitude?");
-        let amplitude = Controller::get_scalar_from_user();
-        if amplitude.is_err() {
-            return Err(());
-        }
+        let amplitude = Controller::get_scalar_from_user()?;
         println!("Period?");
-        let period = Controller::get_scalar_from_user();
-        if period.is_err() {
-            return Err(());
-        }
-        let coords = wave(
+        let period = Controller::get_scalar_from_user()?;
+        wave(
             &self.current_position.into(),
-            &spacing.unwrap(),
-            &length.unwrap(),
-            &amplitude.unwrap(),
-            &period.unwrap(),
-        );
-        Ok(coords)
+            &spacing,
+            &length,
+            &amplitude,
+            &period,
+        )
     }
 
-    fn create_spiralgraph_pattern(&self) -> Result<Vec<PositionMM>, ()> {
+    fn create_spiralgraph_pattern(&self) -> Result<PlotterProgram, &'static str> {
         println!("Radius?");
-        let radius = Controller::get_scalar_from_user();
-        if radius.is_err() {
-            return Err(());
-        }
-        let coords = spiralgraph(&self.current_position.into(), &radius.unwrap());
-        Ok(coords)
+        let radius = Controller::get_scalar_from_user()?;
+        spiralgraph(&self.current_position.into(), &radius)
     }
 
-    fn create_heartwave_pattern(&self) -> Result<Vec<PositionMM>, ()> {
+    fn create_heartwave_pattern(&self) -> Result<PlotterProgram, &'static str> {
         println!("Size?");
-        let size = Controller::get_scalar_from_user();
-        if size.is_err() {
-            return Err(());
-        }
-        let coords = heart_wave(&self.current_position.into(), &size.unwrap());
-        Ok(coords)
+        let size = Controller::get_scalar_from_user()?;
+        heart_wave(&self.current_position.into(), &size)
     }
 
-    fn draw_pattern(&mut self, pattern: Pattern) {
-        let pattern = match pattern {
-            Pattern::Square => self.create_square_pattern(),
-            Pattern::Star => self.create_star_pattern(),
-            Pattern::Wave => self.create_wave_pattern(),
-            Pattern::Spiralgraph => self.create_spiralgraph_pattern(),
-            Pattern::HeartWave => self.create_heartwave_pattern(),
-        };
-        if pattern.is_err() {
-            return;
-        }
-        let pattern = pattern.unwrap();
-        for new_position in &pattern {
-            if !self.physical.in_bounds(new_position) {
-                println!("Point outside of bounds: {new_position}");
-                return;
+    fn load_pattern(&mut self) -> Result<(), &'static str> {
+        println!("(S)quare, s(T)ar, (W)ave, spiral(G)raph, (H)eartwave?");
+        let pattern = match Controller::get_char_from_user()? {
+            's' => self.create_square_pattern(),
+            't' => self.create_star_pattern(),
+            'w' => self.create_wave_pattern(),
+            'g' => self.create_spiralgraph_pattern(),
+            'h' => self.create_heartwave_pattern(),
+            x => {
+                error!("Got char {x}");
+                return Err("Got unknown option");
             }
-        }
-
-        for new_position in &pattern {
-            self.init_move(new_position);
-            loop {
-                match self.move_status {
-                    MoveStatus::Stopped => {
-                        break;
-                    }
-                    MoveStatus::Moving => {
-                        self.update_move();
-                    }
-                }
-            }
-        }
+        }?;
+        self.program = Some(pattern);
+        Ok(())
     }
 
     fn run_instruction(&mut self, instruction: &PlotterInstruction) {
         match instruction {
             PlotterInstruction::Move(new_position) => {
-                self.init_move(&new_position);
+                self.init_move(new_position);
                 loop {
                     match self.move_status {
                         MoveStatus::Stopped => {
@@ -475,7 +357,7 @@ impl Controller {
     }
 
     fn get_axis_limit_from_user() -> Result<AxisLimit, &'static str> {
-        Controller::get_position_from_user().map(|p| AxisLimit::from(p))
+        Controller::get_position_from_user().map(AxisLimit::from)
     }
     fn center_program(&mut self) -> Result<(), &'static str> {
         if self.program.is_none() {
@@ -483,18 +365,14 @@ impl Controller {
         }
         println!("Center to paper limits? (y/n)");
         match Controller::get_char_from_user()? {
-            'y' => {
-                match self.paper_limits.as_ref() {
-                    Some([x_limits, y_limits]) => {
-                        let prog = &mut self.program.as_mut().unwrap();
-                        prog.center_keep_aspect(&x_limits, &y_limits)?;
-                        Ok(())
-                    }
-                    None => {
-                        Err("Paper limits not set")
-                    }
+            'y' => match self.paper_limits.as_ref() {
+                Some([x_limits, y_limits]) => {
+                    let prog = &mut self.program.as_mut().unwrap();
+                    prog.center_keep_aspect(x_limits, y_limits)?;
+                    Ok(())
                 }
-            }
+                None => Err("Paper limits not set"),
+            },
             'n' => {
                 println!("What should the x limits be? (val,val)");
                 let x_limits: AxisLimit = Controller::get_axis_limit_from_user()?;
@@ -545,7 +423,7 @@ impl Controller {
             Some(ref mut program) => {
                 match &self.paper_limits {
                     Some(paper_limits) => {
-                        if !program.within_limits(&paper_limits) {
+                        if !program.within_limits(paper_limits) {
                             return Err("Program not within paper limits");
                         }
                     }
@@ -563,50 +441,35 @@ impl Controller {
             ControllerMode::Ask => {
                 self.set_mode_from_user();
             }
-            ControllerMode::Step => {
-                self.step();
-            }
-            ControllerMode::SmallMove => {
-                self.small_move();
-            }
             ControllerMode::MoveTo => {
                 self.move_to();
                 self.mode = ControllerMode::Ask;
             }
-            ControllerMode::QueryPaper => {
-                if let Ok(_) = self.set_paper_limits_from_user() {
+            ControllerMode::QueryPaper => match self.set_paper_limits_from_user() {
+                Ok(_) => {
                     self.mode = ControllerMode::Ask;
                 }
-            }
-            ControllerMode::QueryPosition => {
-                if let Ok(_) = self.set_current_position_from_user() {
+                Err(msg) => {
+                    error!("{msg}");
+                }
+            },
+            ControllerMode::QueryPosition => match self.set_current_position_from_user() {
+                Ok(_) => {
                     self.mode = ControllerMode::Ask;
                 }
-            }
-            ControllerMode::Moving => {
-                self.update_move();
-                if self.move_status == MoveStatus::Stopped {
-                    self.mode = ControllerMode::QueryPosition;
+                Err(msg) => {
+                    error!("{msg}");
                 }
-            }
-            ControllerMode::Square => {
-                self.draw_pattern(Pattern::Square);
-                self.mode = ControllerMode::Ask;
-            }
-            ControllerMode::Star => {
-                self.draw_pattern(Pattern::Star);
-                self.mode = ControllerMode::Ask;
-            }
-            ControllerMode::Wave => {
-                self.draw_pattern(Pattern::Wave);
-                self.mode = ControllerMode::Ask;
-            }
-            ControllerMode::Spiralgraph => {
-                self.draw_pattern(Pattern::Spiralgraph);
-                self.mode = ControllerMode::Ask;
-            }
-            ControllerMode::HeartWave => {
-                self.draw_pattern(Pattern::HeartWave);
+            },
+            ControllerMode::LoadPattern => {
+                match self.load_pattern() {
+                    Ok(_) => {
+                        info!("Pattern loaded");
+                    }
+                    Err(msg) => {
+                        error!("{msg}");
+                    }
+                }
                 self.mode = ControllerMode::Ask;
             }
             ControllerMode::InitProgram => match self.init_program() {
@@ -618,39 +481,41 @@ impl Controller {
                     self.mode = ControllerMode::Ask;
                 }
             },
-            ControllerMode::RunProgram => {
-                if self.program.is_none() {
+            ControllerMode::RunProgram => match self.program.as_mut() {
+                Some(program) => {
+                    info!(
+                        "Run instruction {}/{}",
+                        program.current_position(),
+                        program.len()
+                    );
+                    match program.next() {
+                        Some(instruction) => self.run_instruction(&instruction),
+                        None => {
+                            self.mode = ControllerMode::Ask;
+                        }
+                    }
+                }
+                None => {
                     info!("No GCode Loaded");
                     self.mode = ControllerMode::Ask;
-                    return;
                 }
-                match self.program.as_mut().unwrap().next() {
-                    Some(instruction) => self.run_instruction(&instruction),
-                    None => {
-                        self.mode = ControllerMode::Ask;
-                    }
+            },
+            ControllerMode::ScaleProgram => match self.scale_program() {
+                Ok(_) => {
+                    self.mode = ControllerMode::Ask;
                 }
-            }
-            ControllerMode::ScaleProgram => {
-                match self.scale_program() {
-                    Ok(_) => {
-                        self.mode = ControllerMode::Ask;
-                    }
-                    Err(msg) => {
-                        error!("{msg}");
-                    }
+                Err(msg) => {
+                    error!("{msg}");
                 }
-            }
-            ControllerMode::CenterProgram => {
-                match self.center_program() {
-                    Ok(_) => {
-                        self.mode = ControllerMode::Ask;
-                    }
-                    Err(msg) => {
-                        error!("{msg}");
-                    }
+            },
+            ControllerMode::CenterProgram => match self.center_program() {
+                Ok(_) => {
+                    self.mode = ControllerMode::Ask;
                 }
-            }
+                Err(msg) => {
+                    error!("{msg}");
+                }
+            },
         }
     }
 }

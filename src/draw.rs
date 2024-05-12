@@ -1,26 +1,21 @@
 use nalgebra::{Point2, Rotation2, Vector2};
 use ndarray::prelude::*;
 
-use crate::position::PositionMM;
+use crate::{gcode::PlotterProgram, position::PositionMM};
 
-pub enum Pattern {
-    Square,
-    Star,
-    Wave,
-    Spiralgraph,
-    HeartWave,
+pub fn square(position: &PositionMM, side_length: &f64) -> Result<PlotterProgram, &'static str> {
+    PlotterProgram::from_positions(
+        position,
+        vec![
+            position.offset(side_length, &[0.0, 1.0]),
+            position.offset(side_length, &[1.0, 1.0]),
+            position.offset(side_length, &[1.0, 0.0]),
+            position.offset(side_length, &[0.0, 0.0]),
+        ],
+    )
 }
 
-pub fn square(position: &PositionMM, side_length: &f64) -> Vec<PositionMM> {
-    vec![
-        position.offset(side_length, &[0.0, 1.0]),
-        position.offset(side_length, &[1.0, 1.0]),
-        position.offset(side_length, &[1.0, 0.0]),
-        position.offset(side_length, &[0.0, 0.0]),
-    ]
-}
-
-pub fn star(position: &PositionMM, side_length: &f64) -> Vec<PositionMM> {
+pub fn star(position: &PositionMM, side_length: &f64) -> Result<PlotterProgram, &'static str> {
     let n = 13;
     let mut p: Point2<f64> = (*position).into();
     let r = side_length;
@@ -40,7 +35,7 @@ pub fn star(position: &PositionMM, side_length: &f64) -> Vec<PositionMM> {
         ptr %= n;
         hist.push(hist[ptr]);
     }
-    hist
+    PlotterProgram::from_positions(position, hist)
 }
 
 pub fn wave(
@@ -49,7 +44,7 @@ pub fn wave(
     length: &f64,
     amplitude: &f64,
     period: &f64,
-) -> Vec<PositionMM> {
+) -> Result<PlotterProgram, &'static str> {
     let n = (length / spacing) as usize;
     let mut pts = Vec::new();
     let y_scale = 2.0 * std::f64::consts::PI / period;
@@ -58,10 +53,10 @@ pub fn wave(
         let y = (x * y_scale).sin() * amplitude / 2.0;
         pts.push(PositionMM::new([x + position.x(), y + position.y()]));
     }
-    pts
+    PlotterProgram::from_positions(position, pts)
 }
 
-pub fn spiralgraph(position: &PositionMM, radius: &f64) -> Vec<PositionMM> {
+pub fn spiralgraph(position: &PositionMM, radius: &f64) -> Result<PlotterProgram, &'static str> {
     let n = 1800;
     let dr = 1.0_f64.to_radians();
     let a = -18.0;
@@ -74,10 +69,10 @@ pub fn spiralgraph(position: &PositionMM, radius: &f64) -> Vec<PositionMM> {
         let y = r * t.sin();
         pts.push(PositionMM::new([x + position.x(), y + position.y()]));
     }
-    pts
+    PlotterProgram::from_positions(position, pts)
 }
 
-pub fn heart_wave(position: &PositionMM, size: &f64) -> Vec<PositionMM> {
+pub fn heart_wave(position: &PositionMM, size: &f64) -> Result<PlotterProgram, &'static str> {
     let a = 20.0;
     let x_arr: Array1<f64> = Array::linspace(-2.0, 2.0, 500);
     let y_arr: Array1<f64> = x_arr.mapv(|x| {
@@ -101,5 +96,5 @@ pub fn heart_wave(position: &PositionMM, size: &f64) -> Vec<PositionMM> {
         let y = (pt.y() - pts[0].y()) * scale + position.y();
         pts2.push(PositionMM::new([x, y]));
     }
-    pts2
+    PlotterProgram::from_positions(position, pts2)
 }
