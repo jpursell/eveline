@@ -311,6 +311,7 @@ impl TryFrom<GCode> for PlotterInstruction {
 
 pub struct PlotterProgram {
     instructions: Vec<PlotterInstruction>,
+    distance_remaining: Vec<f64>,
     x_limits: AxisLimit,
     y_limits: AxisLimit,
     current_position: usize,
@@ -330,6 +331,14 @@ impl Iterator for PlotterProgram {
 }
 
 impl PlotterProgram {
+    fn compute_distance_remaining(
+        instructions: &[PlotterInstruction],
+    ) -> Result<Vec<f64>, &'static str> {
+        let distance_traveled = Vec::new();
+        for instruction in instructions.iter() {
+            todo!();
+        }
+    }
     fn compute_limits(instructions: &[PlotterInstruction]) -> Result<[AxisLimit; 2], &'static str> {
         let mut x_limits = MaybeAxisLimit::new();
         let mut y_limits = MaybeAxisLimit::new();
@@ -348,11 +357,13 @@ impl PlotterProgram {
     }
     pub fn new(instructions: Vec<PlotterInstruction>) -> Result<Self, &'static str> {
         let [x_limits, y_limits] = PlotterProgram::compute_limits(&instructions)?;
+        let distance_remaining = PlotterProgram::compute_distance_remaining(&instructions)?;
         Ok(PlotterProgram {
             instructions,
             x_limits,
             y_limits,
             current_position: 0,
+            distance_remaining,
         })
     }
 
