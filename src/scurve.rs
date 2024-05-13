@@ -51,7 +51,7 @@ impl SCurveSolver {
     /// m_a: Max acceleration
     /// m_j: Max jerk
     pub fn new(physical: &Physical, m_a: f64, m_j: f64) -> Self {
-        let m_v = physical.get_max_velocity() as f64;
+        let m_v = *physical.get_max_velocity();
         let t_j0 = (m_a / m_j).min((m_v * 2.0 / m_j).sqrt());
         let t_v1 = (-m_j * t_j0.powi(2) + m_v) / m_a;
         let min_dist_truncated_coast = -m_a * t_j0.powi(2) / 2.0

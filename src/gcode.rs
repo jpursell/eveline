@@ -311,10 +311,11 @@ impl TryFrom<GCode> for PlotterInstruction {
 
 pub struct PlotterProgram {
     instructions: Vec<PlotterInstruction>,
-    distance_remaining: Vec<f64>,
+    time_remaining: Vec<f64>,
     x_limits: AxisLimit,
     y_limits: AxisLimit,
     current_position: usize,
+    next_lift: Option<usize>,
 }
 
 impl Iterator for PlotterProgram {
@@ -326,18 +327,36 @@ impl Iterator for PlotterProgram {
         }
         let instruction = Some(self.instructions[self.current_position].clone());
         self.current_position += 1;
+        self.next_lift = PlotterProgram::find_next_lift(&self.instructions, &self.current_position);
         instruction
     }
 }
 
 impl PlotterProgram {
-    fn compute_distance_remaining(
-        instructions: &[PlotterInstruction],
-    ) -> Result<Vec<f64>, &'static str> {
-        let distance_traveled = Vec::new();
-        for instruction in instructions.iter() {
-            todo!();
+    fn compute_time_remaining(instructions: &[PlotterInstruction], max_velocity: &f64) -> Vec<f64> {
+        let mut pos = None;
+        let mut time_per_instruction: Vec<f64> = Vec::new();
+        time_per_instruction.reserve(instructions.len());
+        for ins in instructions {
+            let time = if let PlotterInstruction::Move(ipos) = ins {
+                let time = if let Some(last) = pos {
+                    ipos.dist(last) / max_velocity
+                } else {
+                    0.0
+                };
+                pos = Some(ipos);
+                time
+            } else {
+                0.0
+            };
+            time_per_instruction.push(time);
         }
+        for i in 1..time_per_instruction.len() {
+            let iend1 = time_per_instruction.len() - i;
+            let iend0 = iend1 - 1;
+            time_per_instruction[iend0] += time_per_instruction[iend1];
+        }
+        time_per_instruction
     }
     fn compute_limits(instructions: &[PlotterInstruction]) -> Result<[AxisLimit; 2], &'static str> {
         let mut x_limits = MaybeAxisLimit::new();
@@ -355,21 +374,42 @@ impl PlotterProgram {
         self.y_limits = ylim;
         Ok(())
     }
-    pub fn new(instructions: Vec<PlotterInstruction>) -> Result<Self, &'static str> {
+    fn find_next_lift(instructions: &[PlotterInstruction], start: &usize) -> Option<usize> {
+        let mut next_lift = None;
+        for (i, ins) in instructions.iter().enumerate().skip(*start) {
+            if let PlotterInstruction::PenUp = ins {
+                next_lift = Some(i);
+            }
+        }
+        next_lift
+    }
+    pub fn new(
+        instructions: Vec<PlotterInstruction>,
+        max_velocity: &f64,
+    ) -> Result<Self, &'static str> {
         let [x_limits, y_limits] = PlotterProgram::compute_limits(&instructions)?;
-        let distance_remaining = PlotterProgram::compute_distance_remaining(&instructions)?;
+        let time_remaining = PlotterProgram::compute_time_remaining(&instructions, max_velocity);
+        let next_lift = PlotterProgram::find_next_lift(&instructions, &0);
         Ok(PlotterProgram {
             instructions,
+            time_remaining,
             x_limits,
             y_limits,
             current_position: 0,
-            distance_remaining,
+            next_lift,
         })
+    }
+    pub fn time_remaining(&self) -> &f64 {
+        &self.time_remaining[self.current_position]
+    }
+    pub fn time_remaining_next_lift(&self) -> &f64 {
+        todo!();
     }
 
     pub fn from_positions(
         start: &PositionMM,
         positions: Vec<PositionMM>,
+        max_velocity: &f64,
     ) -> Result<PlotterProgram, &'static str> {
         let mut instructions = vec![
             PlotterInstruction::PenUp,
@@ -382,7 +422,7 @@ impl PlotterProgram {
             .collect();
         instructions.append(&mut positions);
         instructions.push(PlotterInstruction::PenUp);
-        PlotterProgram::new(instructions)
+        PlotterProgram::new(instructions, max_velocity)
     }
 
     pub fn within_limits(&self, limits: &[AxisLimit; 2]) -> bool {
@@ -390,6 +430,7 @@ impl PlotterProgram {
     }
     pub fn reset(&mut self) {
         self.current_position = 0;
+        self.next_lift = PlotterProgram::find_next_lift(&self.instructions, &self.current_position);
     }
     pub fn len(&self) -> usize {
         self.instructions.len()
@@ -471,7 +512,10 @@ impl PlotterProgram {
         }
     }
 
-    pub fn read_gcode_file(path: &Path) -> Result<PlotterProgram, &'static str> {
+    pub fn read_gcode_file(
+        path: &Path,
+        max_velocity: &f64,
+    ) -> Result<PlotterProgram, &'static str> {
         let file = File::open(path).expect("failed to open file");
         let mut reader = BufReader::new(file);
         let mut buf = Vec::new();
@@ -555,7 +599,7 @@ impl PlotterProgram {
             }
             instructions.push(instruction)
         }
-        let program = PlotterProgram::new(instructions)?;
+        let program = PlotterProgram::new(instructions, max_velocity)?;
         Ok(program)
     }
 }

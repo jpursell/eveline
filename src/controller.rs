@@ -54,7 +54,7 @@ impl Controller {
         let max_jerk = 1e9;
         let solver = SCurveSolver::new(&physical, max_acceleration, max_jerk);
         info!("solver: {solver}");
-        let gcode_program = Controller::load_gcode(&gcode_path);
+        let gcode_program = Controller::load_gcode(&gcode_path, physical.get_max_velocity());
         Controller {
             current_position: Position::default(),
             current_position_initialized: false,
@@ -73,11 +73,12 @@ impl Controller {
 
     // TODO: implement better timing info
 
-    fn load_gcode(gcode_path: &Option<PathBuf>) -> Option<PlotterProgram> {
+    fn load_gcode(gcode_path: &Option<PathBuf>, max_velocity: &f64) -> Option<PlotterProgram> {
         if gcode_path.is_none() {
             return None;
         }
-        let gcode_file = PlotterProgram::read_gcode_file(gcode_path.as_ref().unwrap());
+        let gcode_file =
+            PlotterProgram::read_gcode_file(gcode_path.as_ref().unwrap(), max_velocity);
         match gcode_file {
             Err(msg) => {
                 error!("{msg}");
@@ -270,13 +271,21 @@ impl Controller {
     fn create_square_pattern(&self) -> Result<PlotterProgram, &'static str> {
         println!("How long should square sides be?");
         let square_side_length = Controller::get_scalar_from_user()?;
-        square(&self.current_position.into(), &square_side_length)
+        square(
+            &self.current_position.into(),
+            &square_side_length,
+            self.physical.get_max_velocity(),
+        )
     }
 
     fn create_star_pattern(&self) -> Result<PlotterProgram, &'static str> {
         println!("How long should star lines be?");
         let size = Controller::get_scalar_from_user()?;
-        star(&self.current_position.into(), &size)
+        star(
+            &self.current_position.into(),
+            &size,
+            self.physical.get_max_velocity(),
+        )
     }
 
     fn create_wave_pattern(&self) -> Result<PlotterProgram, &'static str> {
@@ -294,19 +303,28 @@ impl Controller {
             &length,
             &amplitude,
             &period,
+            self.physical.get_max_velocity(),
         )
     }
 
     fn create_spiralgraph_pattern(&self) -> Result<PlotterProgram, &'static str> {
         println!("Radius?");
         let radius = Controller::get_scalar_from_user()?;
-        spiralgraph(&self.current_position.into(), &radius)
+        spiralgraph(
+            &self.current_position.into(),
+            &radius,
+            self.physical.get_max_velocity(),
+        )
     }
 
     fn create_heartwave_pattern(&self) -> Result<PlotterProgram, &'static str> {
         println!("Size?");
         let size = Controller::get_scalar_from_user()?;
-        heart_wave(&self.current_position.into(), &size)
+        heart_wave(
+            &self.current_position.into(),
+            &size,
+            self.physical.get_max_velocity(),
+        )
     }
 
     fn load_pattern(&mut self) -> Result<(), &'static str> {
