@@ -327,7 +327,12 @@ impl Iterator for PlotterProgram {
         }
         let instruction = Some(self.instructions[self.current_position].clone());
         self.current_position += 1;
-        self.next_lift = PlotterProgram::find_next_lift(&self.instructions, &self.current_position);
+        if let Some(nl) = self.next_lift {
+            if nl < self.current_position {
+                self.next_lift =
+                    PlotterProgram::find_next_lift(&self.instructions, &self.current_position);
+            }
+        }
         instruction
     }
 }
@@ -378,6 +383,7 @@ impl PlotterProgram {
         for (i, ins) in instructions.iter().enumerate().skip(*start) {
             if let PlotterInstruction::PenUp = ins {
                 next_lift = Some(i);
+                break;
             }
         }
         next_lift
@@ -615,10 +621,11 @@ impl Display for PlotterProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Program: npts: {}, x_limits: {}, y_limits: {}",
+            "Program: npts: {}, x_limits: {}, y_limits: {}, next_lift: {:?}",
             self.instructions.len(),
             self.x_limits,
-            self.y_limits
+            self.y_limits,
+            self.next_lift
         )
     }
 }
