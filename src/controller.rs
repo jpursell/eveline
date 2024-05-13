@@ -502,9 +502,16 @@ impl Controller {
             ControllerMode::RunProgram => match self.program.as_mut() {
                 Some(program) => {
                     info!(
-                        "Run instruction {}/{}",
+                        "Run instruction: {}/{}, remaining: {}/{}",
                         program.current_position(),
-                        program.len()
+                        program.len(),
+                        match program.time_remaining_next_lift() {
+                            Some(t_next) => {
+                                t_next
+                            }
+                            None => std::f64::INFINITY,
+                        },
+                        program.time_remaining()
                     );
                     match program.next() {
                         Some(instruction) => self.run_instruction(&instruction),

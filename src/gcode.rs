@@ -335,8 +335,7 @@ impl Iterator for PlotterProgram {
 impl PlotterProgram {
     fn compute_time_remaining(instructions: &[PlotterInstruction], max_velocity: &f64) -> Vec<f64> {
         let mut pos = None;
-        let mut time_per_instruction: Vec<f64> = Vec::new();
-        time_per_instruction.reserve(instructions.len());
+        let mut time_per_instruction: Vec<f64> = Vec::with_capacity(instructions.len());
         for ins in instructions {
             let time = if let PlotterInstruction::Move(ipos) = ins {
                 let time = if let Some(last) = pos {
@@ -402,8 +401,10 @@ impl PlotterProgram {
     pub fn time_remaining(&self) -> &f64 {
         &self.time_remaining[self.current_position]
     }
-    pub fn time_remaining_next_lift(&self) -> &f64 {
-        todo!();
+    pub fn time_remaining_next_lift(&self) -> Option<f64> {
+        self.next_lift.map(|next_lift| {
+            self.time_remaining[self.current_position] - self.time_remaining[next_lift]
+        })
     }
 
     pub fn from_positions(
