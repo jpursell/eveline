@@ -399,9 +399,15 @@ impl PlotterProgram {
         })
     }
     pub fn time_remaining(&self) -> &f64 {
+        if self.current_position >= self.time_remaining.len() {
+            return &0.0;
+        }
         &self.time_remaining[self.current_position]
     }
     pub fn time_remaining_next_lift(&self) -> Option<f64> {
+        if self.current_position >= self.time_remaining.len() {
+            return Some(0.0);
+        }
         self.next_lift.map(|next_lift| {
             self.time_remaining[self.current_position] - self.time_remaining[next_lift]
         })
