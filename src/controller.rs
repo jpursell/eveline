@@ -30,6 +30,20 @@ pub enum MoveStatus {
     Moving,
 }
 
+fn format_time(secs: f64) -> String {
+    if secs < 60.0 {
+        format!("{secs:02.1}")
+    } else if secs < 60.0 * 60.0 {
+        let minutes = (secs / 60.0).floor() as u8;
+        let seconds = secs - minutes as f64 * 60.0;
+        format!("{minutes:02}:{seconds:02.1}")
+    } else {
+        let hours = (secs / 60.0 / 60.0).floor() as u32;
+        let minutes = ((secs - (hours as f64 * 60.0 * 60.0)) / 60.0).floor() as u8;
+        let seconds = secs - (hours as f64 * 60.0 * 60.0) - (minutes as f64 * 60.0);
+        format!("{hours:02}:{minutes:02}:{seconds:02.1}")
+    }
+}
 pub struct Controller {
     current_position: Position,
     current_position_initialized: bool,
@@ -207,7 +221,6 @@ impl Controller {
         }
         // init s-curve
         self.s_curve = self.solver.solve_curve(self.current_position.into(), *mm);
-        info!("s-curve {}", self.s_curve);
         self.predictor = Predictor::new();
         self.move_status = MoveStatus::Moving;
         self.wait_count = 0;
@@ -216,7 +229,6 @@ impl Controller {
     fn update_move(&mut self) {
         self.move_status = self.s_curve.get_move_status();
         if self.move_status == MoveStatus::Stopped {
-            info!("new position: {}", self.current_position);
             return;
         }
         let desired = self.s_curve.get_desired(&self.solver, &self.physical);
@@ -505,13 +517,13 @@ impl Controller {
                         "Run instruction: {}/{}, remaining: {}/{}",
                         program.current_position(),
                         program.len(),
-                        match program.time_remaining_next_lift() {
+                        format_time(match program.time_remaining_next_lift() {
                             Some(t_next) => {
                                 t_next
                             }
                             None => std::f64::INFINITY,
-                        },
-                        program.time_remaining()
+                        }),
+                        format_time(*program.time_remaining())
                     );
                     match program.next() {
                         Some(instruction) => self.run_instruction(&instruction),
