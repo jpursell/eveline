@@ -57,12 +57,16 @@ pub struct Controller {
     predictor: Predictor,
     wait_count: usize,
     program: Option<PlotterProgram>,
+    bad_steps_prevented: u64,
 }
 
 impl Controller {
     pub fn new(gcode_path: Option<PathBuf>) -> Controller {
-        let motors = [Side::Left, Side::Right].map(Motor::new);
         let physical = Physical::new();
+        let motors = [
+            Motor::new(Side::Left, *physical.get_min_seconds_per_step()),
+            Motor::new(Side::Right, *physical.get_min_seconds_per_step()),
+        ];
         info!("Physical: {physical}");
         let max_acceleration = 1e4;
         let max_jerk = 1e9;
@@ -82,6 +86,7 @@ impl Controller {
             predictor: Predictor::default(),
             wait_count: 0,
             program: gcode_program,
+            bad_steps_prevented: 0,
         }
     }
 
@@ -249,12 +254,15 @@ impl Controller {
         instructions
             .iter()
             .enumerate()
-            .for_each(|(i, instruction)| {
-                self.motors[i].step(instruction);
-                step.step(i, instruction);
+            .for_each(|(i, instruction)| match self.motors[i].step(instruction) {
+                Ok(()) => {
+                    step.step(i, instruction);
+                }
+                Err(()) => {
+                    self.bad_steps_prevented += 1;
+                }
             });
         self.current_position = Position::from_step(step, &self.physical);
-        // info!("new position {}", self.current_position);
     }
     fn move_to(&mut self) {
         if !self.current_position_initialized {
@@ -514,7 +522,7 @@ impl Controller {
             ControllerMode::RunProgram => match self.program.as_mut() {
                 Some(program) => {
                     info!(
-                        "Run instruction: {}/{}, remaining: {}/{}",
+                        "Run instruction: {}/{}, remaining: {}/{}, bad_prevented: {}",
                         program.current_position(),
                         program.len(),
                         format_time(match program.time_remaining_next_lift() {
@@ -523,7 +531,8 @@ impl Controller {
                             }
                             None => std::f64::INFINITY,
                         }),
-                        format_time(*program.time_remaining())
+                        format_time(*program.time_remaining()),
+                        self.bad_steps_prevented
                     );
                     match program.next() {
                         Some(instruction) => self.run_instruction(&instruction),

@@ -14,6 +14,7 @@ pub struct Physical {
     steps_per_mm: f64,
     mm_per_step: f64,
     max_velocity: f64,
+    min_seconds_per_step: f64,
 }
 
 impl Display for Physical {
@@ -46,6 +47,7 @@ impl Physical {
         let max_revs_per_second = max_rpm / 60.0;
         // max_steps_per_second is about 170
         let max_steps_per_second = max_revs_per_second * motor_steps_per_revolution;
+        let min_seconds_per_step = max_steps_per_second.recip();
         // max velocity is about 5 mm/s
         let max_velocity = max_steps_per_second / steps_per_mm;
         let x_limits = [45.0, 250.0];
@@ -59,6 +61,7 @@ impl Physical {
             x_limits,
             y_limits,
             y_offset,
+            min_seconds_per_step,
         }
     }
     pub fn adjust_paper_y_limit(&self, y_limit: &mut AxisLimit) {
@@ -87,6 +90,9 @@ impl Physical {
     }
     pub fn get_max_velocity(&self) -> &f64 {
         &self.max_velocity
+    }
+    pub fn get_min_seconds_per_step(&self) -> &f64 {
+        &self.min_seconds_per_step
     }
     pub fn step_to_mm(&self, step: &usize) -> f64 {
         *step as f64 * self.mm_per_step

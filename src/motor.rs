@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, time::Instant};
 
 use rppal::gpio::{Gpio, OutputPin};
 
@@ -22,6 +22,8 @@ pub struct Motor {
     side: Side,
     current_pwm: usize,
     current_on: usize,
+    min_seconds_per_step: f64,
+    time_last_step: Instant,
 }
 
 pub enum Side {
@@ -37,7 +39,7 @@ impl Display for Side {
     }
 }
 impl Motor {
-    pub fn new(side: Side) -> Motor {
+    pub fn new(side: Side, min_seconds_per_step: f64) -> Motor {
         // init output pins
         let pin_nums = match side {
             Side::Left => LEFT_PINS,
@@ -75,6 +77,8 @@ impl Motor {
             side,
             current_pwm,
             current_on,
+            min_seconds_per_step,
+            time_last_step: Instant::now(),
         }
     }
     fn step_shorter(&mut self) {
@@ -91,7 +95,16 @@ impl Motor {
         };
         self.position += 1;
     }
-    pub fn step(&mut self, instruction: &StepInstruction) {
+    pub fn step(&mut self, instruction: &StepInstruction) -> Result<(), ()> {
+        match instruction {
+            StepInstruction::StepLonger | StepInstruction::StepShorter => {
+                if self.time_last_step.elapsed().as_secs_f64() < self.min_seconds_per_step {
+                    return Err(());
+                }
+                self.time_last_step = Instant::now();
+            }
+            StepInstruction::Hold => return Ok(()),
+        }
         match instruction {
             StepInstruction::StepLonger => {
                 self.step_longer();
@@ -101,6 +114,7 @@ impl Motor {
             }
             StepInstruction::Hold => {}
         }
+        Ok(())
     }
     /// Update pins for whole step mode
     fn update_pins_whole_step(&mut self) {
