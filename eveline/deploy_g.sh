@@ -8,7 +8,7 @@ set -o xtrace
 readonly TARGET_HOST=jpursell@iprj
 readonly TARGET_PATH=/home/jpursell/eveline
 readonly TARGET_ARCH=arm-unknown-linux-gnueabihf
-readonly SOURCE_PATH=./target/${TARGET_ARCH}/release/eveline
+readonly SOURCE_PATH=../target/${TARGET_ARCH}/release/eveline
 readonly TARGET_GCODE_PATH=/home/jpursell/eveline.gcode
 
 cargo build --release --target=${TARGET_ARCH}
