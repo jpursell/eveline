@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 eframe = "0.27.2"
+egui_plot = "0.27.2"
+emath = "0.27.2"
