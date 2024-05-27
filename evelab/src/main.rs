@@ -5,7 +5,7 @@ use emath::{Pos2, Rect};
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([640.0, 240.0])
+            .with_inner_size([640.0, 300.0])
             .with_drag_and_drop(true),
         ..Default::default()
     };
@@ -33,32 +33,6 @@ impl Default for MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            Frame::canvas(ui.style()).show(ui, |ui| {
-                ui.ctx().request_repaint();
-
-                // let desired_size = ui.available_width() * vec2(1.0, 0.35);
-                //let (_id, rect) = ui.allocate_space(desired_size);
-                let rect = ui.available_rect_before_wrap();
-
-                let to_screen = emath::RectTransform::from_to(
-                    Rect::from_x_y_ranges(0.0..=1.0, 0.0..=1.0),
-                    rect,
-                );
-
-                let mut shapes = vec![];
-
-                let points: Vec<Pos2> = self.points.iter().map(|p| to_screen * *p).collect();
-
-                let radius = 10.0;
-                for point in &points {
-                    shapes.push(egui::epaint::Shape::circle_filled(
-                        *point,
-                        radius,
-                        egui::Color32::from_rgb(255, 255, 255),
-                    ));
-                }
-                ui.painter().extend(shapes);
-            });
             ui.label("Drag-and-drop files onto the window!");
 
             if ui.button("Open file…").clicked() {
@@ -103,6 +77,32 @@ impl eframe::App for MyApp {
                     }
                 });
             }
+            Frame::canvas(ui.style()).show(ui, |ui| {
+                ui.ctx().request_repaint();
+
+                // let desired_size = ui.available_width() * vec2(1.0, 0.35);
+                //let (_id, rect) = ui.allocate_space(desired_size);
+                let rect = ui.available_rect_before_wrap();
+
+                let to_screen = emath::RectTransform::from_to(
+                    Rect::from_x_y_ranges(0.0..=1.0, 0.0..=1.0),
+                    rect,
+                );
+
+                let mut shapes = vec![];
+
+                let points: Vec<Pos2> = self.points.iter().map(|p| to_screen * *p).collect();
+
+                let radius = 10.0;
+                for point in &points {
+                    shapes.push(egui::epaint::Shape::circle_filled(
+                        *point,
+                        radius,
+                        egui::Color32::from_rgb(255, 255, 255),
+                    ));
+                }
+                ui.painter().extend(shapes);
+            });
         });
 
         preview_files_being_dropped(ctx);
